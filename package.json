@@ -1,16 +1,20 @@
 {
   "name": "redash-mcp",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "MCP server for Redash",
   "type": "module",
   "main": "dist/index.js",
+  "bin": {
+    "redash-mcp": "dist/index.js"
+  },
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0"
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^3.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
