@@ -24,7 +24,7 @@ function findNpxPath(): string {
   return "npx";
 }
 
-function getConfigPath(): string {
+function getDesktopConfigPath(): string {
   const platform = os.platform();
   if (platform === "darwin") {
     return path.join(os.homedir(), "Library", "Application Support", "Claude", "claude_desktop_config.json");
@@ -35,8 +35,18 @@ function getConfigPath(): string {
   }
 }
 
+function getClaudeCodeConfigPath(): string {
+  return path.join(os.homedir(), ".claude", "settings.json");
+}
+
 export async function main() {
   console.log("\n🔧 redash-mcp 설치 마법사\n");
+
+  console.log("설치 대상을 선택하세요:");
+  console.log("  1) Claude Desktop");
+  console.log("  2) Claude Code (CLI)");
+  console.log("  3) 둘 다");
+  const target = (await ask("\n선택 (1/2/3) [1]: ")).trim() || "1";
 
   const redashUrl = (await ask("Redash URL을 입력하세요 (예: https://redash.example.com): ")).trim().replace(/\/$/, "");
   const apiKey = (await ask("Redash API 키를 입력하세요: ")).trim();
@@ -47,7 +57,33 @@ export async function main() {
     process.exit(1);
   }
 
-  const configPath = getConfigPath();
+  const npxPath = findNpxPath();
+
+  const mcpEntry = {
+    command: npxPath,
+    args: ["-y", "redash-mcp"],
+    env: {
+      REDASH_URL: redashUrl,
+      REDASH_API_KEY: apiKey,
+    },
+  };
+
+  if (target === "1" || target === "3") {
+    setupDesktop(mcpEntry);
+  }
+
+  if (target === "2" || target === "3") {
+    setupClaudeCode(mcpEntry);
+  }
+
+  if (!["1", "2", "3"].includes(target)) {
+    console.error("\n❌ 잘못된 선택입니다. 1, 2, 3 중 하나를 입력하세요.");
+    process.exit(1);
+  }
+}
+
+function setupDesktop(mcpEntry: any) {
+  const configPath = getDesktopConfigPath();
   let config: any = { mcpServers: {} };
 
   if (fs.existsSync(configPath)) {
@@ -62,21 +98,35 @@ export async function main() {
     fs.mkdirSync(path.dirname(configPath), { recursive: true });
   }
 
-  const npxPath = findNpxPath();
-
-  config.mcpServers["redash-mcp"] = {
-    command: npxPath,
-    args: ["-y", "redash-mcp"],
-    env: {
-      REDASH_URL: redashUrl,
-      REDASH_API_KEY: apiKey,
-    },
-  };
-
+  config.mcpServers["redash-mcp"] = mcpEntry;
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf8");
 
-  console.log("\n✅ 설치 완료!");
+  console.log("\n✅ Claude Desktop 설정 완료!");
   console.log(`   설정 파일: ${configPath}`);
-  console.log("\n👉 Claude Desktop을 완전히 종료했다가 다시 시작하면 redash-mcp가 활성화됩니다.\n");
+  console.log("   👉 Claude Desktop을 재시작하면 활성화됩니다.");
+}
+
+function setupClaudeCode(mcpEntry: any) {
+  const configPath = getClaudeCodeConfigPath();
+  let config: any = {};
+
+  if (fs.existsSync(configPath)) {
+    try {
+      config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    } catch {
+      console.error("\n❌ Claude Code settings.json 파일을 읽을 수 없습니다.");
+      process.exit(1);
+    }
+  } else {
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+  }
+
+  config.mcpServers ??= {};
+  config.mcpServers["redash-mcp"] = mcpEntry;
+  fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf8");
+
+  console.log("\n✅ Claude Code (CLI) 설정 완료!");
+  console.log(`   설정 파일: ${configPath}`);
+  console.log("   👉 새 Claude Code 세션에서 바로 사용할 수 있습니다.");
 }
 
