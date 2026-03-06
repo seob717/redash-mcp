@@ -27,7 +27,14 @@ async function redashFetch(path: string, options?: RequestInit) {
     },
   });
   if (!res.ok) {
-    throw new Error(`Redash API error: ${res.status} ${res.statusText}`);
+    let hint = "";
+    if (res.status === 401) hint = " (REDASH_API_KEY를 확인하세요)";
+    else if (res.status === 403) hint = " (해당 리소스에 대한 접근 권한이 없습니다)";
+    else if (res.status === 404) hint = " (리소스를 찾을 수 없습니다. ID를 확인하세요)";
+    throw new Error(`Redash API error: ${res.status} ${res.statusText}${hint}`);
+  }
+  if (res.status === 204 || res.headers.get("content-length") === "0") {
+    return null;
   }
   return res.json();
 }
@@ -35,10 +42,10 @@ async function redashFetch(path: string, options?: RequestInit) {
 async function pollQueryResult(jobId: string, timeoutSecs = 30): Promise<any> {
   for (let i = 0; i < timeoutSecs; i++) {
     const job = await redashFetch(`/jobs/${jobId}`);
-    if (job.job.status === 3) {
+    if (job.job.status === 3) { // 3 = success
       return await redashFetch(`/query_results/${job.job.query_result_id}`);
     }
-    if (job.job.status === 4) {
+    if (job.job.status === 4) { // 4 = failure
       throw new Error(`Query failed: ${job.job.error}`);
     }
     await new Promise((r) => setTimeout(r, 1000));
@@ -47,10 +54,11 @@ async function pollQueryResult(jobId: string, timeoutSecs = 30): Promise<any> {
 }
 
 function formatAsMarkdownTable(columns: string[], rows: any[]): string {
-  const header = `| ${columns.join(" | ")} |`;
+  const escape = (s: string) => s.replace(/\|/g, "\\|");
+  const header = `| ${columns.map(escape).join(" | ")} |`;
   const separator = `| ${columns.map(() => "---").join(" | ")} |`;
   const body = rows
-    .map((row) => `| ${columns.map((c) => String(row[c] ?? "")).join(" | ")} |`)
+    .map((row) => `| ${columns.map((c) => escape(String(row[c] ?? ""))).join(" | ")} |`)
     .join("\n");
   return `${header}\n${separator}\n${body}`;
 }
@@ -72,7 +80,7 @@ async function fetchSchema(dataSourceId: number): Promise<any[]> {
 
 const server = new McpServer({
   name: "redash-mcp",
-  version: "2.0.1",
+  version: "2.0.2",
 });
 
 // ─── Data Sources ────────────────────────────────────────────────────────────
@@ -234,8 +242,10 @@ server.tool(
   "저장된 Redash 쿼리를 ID로 실행하고 결과를 반환합니다.",
   {
     query_id: z.number().describe("저장된 쿼리 ID (list_queries로 확인)"),
+    max_rows: z.number().optional().default(100).describe("반환할 최대 행 수 (기본 100)"),
+    format: z.enum(["table", "json"]).optional().default("table").describe("결과 포맷: table(마크다운) 또는 json"),
   },
-  async ({ query_id }) => {
+  async ({ query_id, max_rows, format }) => {
     const res = await redashFetch(`/queries/${query_id}/results`, {
       method: "POST",
       body: JSON.stringify({}),
@@ -251,12 +261,23 @@ server.tool(
     const qr = result.query_result;
     const rows = qr.data.rows;
     const columns = qr.data.columns.map((c: any) => c.name);
+    const displayRows = rows.slice(0, max_rows);
+    const truncated = rows.length > max_rows
+      ? `\n⚠️ 전체 ${rows.length}행 중 ${max_rows}행만 표시합니다.`
+      : "";
+
+    let body: string;
+    if (format === "json") {
+      body = JSON.stringify(displayRows, null, 2);
+    } else {
+      body = formatAsMarkdownTable(columns, displayRows);
+    }
 
     return {
       content: [
         {
           type: "text",
-          text: `쿼리 ID: ${query_id}\n총 ${rows.length}행\n컬럼: ${columns.join(", ")}\n\n${JSON.stringify(rows, null, 2)}`,
+          text: `쿼리 ID: ${query_id}\n총 ${rows.length}행 | 컬럼: ${columns.join(", ")}${truncated}\n\n${body}`,
         },
       ],
     };
@@ -380,16 +401,7 @@ server.tool(
     query_id: z.number().describe("아카이브할 쿼리 ID"),
   },
   async ({ query_id }) => {
-    const res = await fetch(`${REDASH_URL}/api/queries/${query_id}`, {
-      method: "DELETE",
-      headers: {
-        "Authorization": `Key ${REDASH_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-    });
-    if (!res.ok) {
-      throw new Error(`Redash API error: ${res.status} ${res.statusText}`);
-    }
+    await redashFetch(`/queries/${query_id}`, { method: "DELETE" });
     return {
       content: [{ type: "text", text: `쿼리 ${query_id}가 아카이브되었습니다.` }],
     };
