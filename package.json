@@ -1,6 +1,6 @@
 {
   "name": "redash-mcp",
-  "version": "2.2.1",
+  "version": "2.2.2",
   "description": "MCP server for Redash",
   "repository": {
     "type": "git",
