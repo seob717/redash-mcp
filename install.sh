@@ -61,31 +61,18 @@ if [ "$OS" = "Darwin" ]; then
     log_success "Claude Desktop이 이미 설치되어 있습니다."
   else
     log_warn "Claude Desktop이 설치되어 있지 않습니다."
-    CLAUDE_INSTALLED=false
-
-    if command -v brew &>/dev/null; then
-      log_info "Homebrew로 Claude Desktop 설치 중... (관리자 권한이 필요할 수 있습니다)"
-      if brew install --cask claude; then
-        CLAUDE_INSTALLED=true
+    log_info "공식 사이트에서 Claude Desktop 다운로드 중..."
+    if curl -fSL -o /tmp/Claude.pkg "https://claude.ai/api/desktop/darwin/universal/pkg/latest/redirect"; then
+      log_info "Claude Desktop 설치 중... (관리자 권한이 필요합니다)"
+      if sudo installer -pkg /tmp/Claude.pkg -target /; then
+        log_success "Claude Desktop 설치 완료"
+      else
+        log_error "Claude Desktop 설치 실패"
+        echo "  → https://claude.ai/download 에서 직접 설치해주세요."
       fi
-    fi
-
-    # brew 실패 또는 없으면 curl로 PKG 직접 설치
-    if [ "$CLAUDE_INSTALLED" = false ]; then
-      log_info "공식 사이트에서 Claude Desktop 다운로드 중..."
-      if curl -fSL -o /tmp/Claude.pkg "https://claude.ai/api/desktop/darwin/universal/pkg/latest/redirect"; then
-        log_info "Claude Desktop 설치 중... (관리자 권한이 필요합니다)"
-        if sudo installer -pkg /tmp/Claude.pkg -target /; then
-          CLAUDE_INSTALLED=true
-        fi
-        rm -f /tmp/Claude.pkg
-      fi
-    fi
-
-    if [ "$CLAUDE_INSTALLED" = true ]; then
-      log_success "Claude Desktop 설치 완료"
+      rm -f /tmp/Claude.pkg
     else
-      log_error "Claude Desktop 설치 실패"
+      log_error "Claude Desktop 다운로드 실패"
       echo "  → https://claude.ai/download 에서 직접 설치해주세요."
     fi
   fi

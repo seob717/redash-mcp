@@ -72,34 +72,16 @@ if (Test-Path $claudePath) {
   Write-Success "Claude Desktop이 이미 설치되어 있습니다."
 } else {
   Write-Warn "Claude Desktop이 설치되어 있지 않습니다."
-  $claudeInstalled = $false
-
-  # winget으로 시도
-  if (Has-Command "winget") {
-    Write-Info "winget으로 Claude Desktop 설치 중..."
-    try {
-      winget install -e --id Anthropic.Claude --silent --accept-package-agreements --accept-source-agreements
-      $claudeInstalled = $true
-    } catch {}
-  }
-
-  # winget 실패 또는 없으면 공식 사이트에서 직접 다운로드
-  if (-not $claudeInstalled) {
-    Write-Info "공식 사이트에서 Claude Desktop 다운로드 중..."
-    try {
-      $arch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "x64" }
-      $installerPath = Join-Path $env:TEMP "Claude-Setup.exe"
-      Invoke-WebRequest -Uri "https://claude.ai/api/desktop/win32/$arch/exe/latest/redirect" -OutFile $installerPath -UseBasicParsing
-      Write-Info "Claude Desktop 설치 중..."
-      Start-Process -FilePath $installerPath -ArgumentList "/S" -Wait
-      Remove-Item $installerPath -Force -ErrorAction SilentlyContinue
-      $claudeInstalled = $true
-    } catch {}
-  }
-
-  if ($claudeInstalled) {
+  Write-Info "공식 사이트에서 Claude Desktop 다운로드 중..."
+  try {
+    $arch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "x64" }
+    $installerPath = Join-Path $env:TEMP "Claude-Setup.exe"
+    Invoke-WebRequest -Uri "https://claude.ai/api/desktop/win32/$arch/exe/latest/redirect" -OutFile $installerPath -UseBasicParsing
+    Write-Info "Claude Desktop 설치 중..."
+    Start-Process -FilePath $installerPath -ArgumentList "/S" -Wait
+    Remove-Item $installerPath -Force -ErrorAction SilentlyContinue
     Write-Success "Claude Desktop 설치 완료"
-  } else {
+  } catch {
     Write-Fail "Claude Desktop 설치 실패"
     Write-Host "  → https://claude.ai/download 에서 직접 설치해주세요."
   }
