@@ -1,0 +1,112 @@
+name: Test Install Script
+
+on:
+  push:
+    paths:
+      - 'install.sh'
+  pull_request:
+    paths:
+      - 'install.sh'
+  workflow_dispatch:
+
+jobs:
+  test-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Remove pre-installed Node.js
+        run: |
+          sudo rm -rf /usr/local/bin/node /usr/local/bin/npm /usr/local/bin/npx
+          sudo rm -rf /usr/local/lib/node_modules
+          hash -r
+
+      - name: Run install script (non-interactive)
+        run: |
+          printf '\n\n2\nhttps://redash.test.com\ntest_api_key_123\n' | bash install.sh
+
+      - name: Verify Node.js installed
+        run: |
+          export NVM_DIR="$HOME/.nvm"
+          [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+          node --version
+          npm --version
+
+      - name: Verify CLI config created
+        run: |
+          cat ~/.claude/settings.json
+          python3 -c "
+          import json, os
+          with open(os.path.expanduser('~/.claude/settings.json')) as f:
+              config = json.load(f)
+          mcp = config['mcpServers']['redash-mcp']
+          assert mcp['env']['REDASH_URL'] == 'https://redash.test.com'
+          assert mcp['env']['REDASH_API_KEY'] == 'test_api_key_123'
+          print('Config validation passed')
+          "
+
+  test-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Remove pre-installed Node.js
+        run: |
+          sudo rm -rf /usr/local/bin/node /usr/local/bin/npm /usr/local/bin/npx
+          sudo rm -rf /usr/local/lib/node_modules
+          hash -r
+
+      - name: Run install script (non-interactive)
+        run: |
+          printf '\n\n2\nhttps://redash.test.com\ntest_api_key_123\n' | bash install.sh
+
+      - name: Verify Node.js installed
+        run: |
+          export NVM_DIR="$HOME/.nvm"
+          [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+          node --version
+          npm --version
+
+      - name: Verify CLI config created
+        run: |
+          cat ~/.claude/settings.json
+          python3 -c "
+          import json, os
+          with open(os.path.expanduser('~/.claude/settings.json')) as f:
+              config = json.load(f)
+          mcp = config['mcpServers']['redash-mcp']
+          assert mcp['env']['REDASH_URL'] == 'https://redash.test.com'
+          assert mcp['env']['REDASH_API_KEY'] == 'test_api_key_123'
+          print('Config validation passed')
+          "
+
+  test-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run install script (non-interactive)
+        run: |
+          printf '\n\n2\nhttps://redash.test.com\ntest_api_key_123\n' | bash install.sh
+
+      - name: Verify Node.js installed
+        run: |
+          export NVM_DIR="$HOME/.nvm"
+          [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+          node --version
+          npm --version
+
+      - name: Verify CLI config created
+        shell: python
+        run: |
+          import json, os
+          config_path = os.path.join(os.path.expanduser("~"), ".claude", "settings.json")
+          with open(config_path) as f:
+              config = json.load(f)
+          mcp = config["mcpServers"]["redash-mcp"]
+          assert mcp["env"]["REDASH_URL"] == "https://redash.test.com"
+          assert mcp["env"]["REDASH_API_KEY"] == "test_api_key_123"
+          print("Config validation passed")
