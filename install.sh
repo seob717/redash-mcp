@@ -13,8 +13,8 @@ log_warn()    { echo -e "  ${YELLOW}⚠${NC}  $1"; }
 log_error()   { echo -e "  ${RED}✗${NC}  $1"; }
 log_step()    { echo -e "\n${BOLD}▶ $1${NC}"; }
 
-# /dev/tty가 없으면 (CI 등) stdin으로 폴백
-if [ -e /dev/tty ] && [ -r /dev/tty ]; then
+# /dev/tty가 사용 가능한지 실제 테스트 (CI에서는 존재해도 읽기 불가)
+if (echo < /dev/tty) 2>/dev/null; then
   READ_FROM=/dev/tty
 else
   READ_FROM=/dev/stdin
