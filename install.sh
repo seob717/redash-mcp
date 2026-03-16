@@ -62,29 +62,36 @@ if [ "$OS" = "Darwin" ]; then
     log_success "Claude Desktop이 이미 설치되어 있습니다."
   else
     log_warn "Claude Desktop이 설치되어 있지 않습니다."
-    log_info "최신 버전 확인 중..."
-    CLAUDE_URL=$(curl -fsSL "https://downloads.claude.ai/releases/darwin/universal/RELEASES.json" \
-      | python3 -c "import sys,json; print(json.load(sys.stdin)['releases'][0]['updateTo']['url'])" 2>/dev/null)
+    echo ""
+    echo -e "  → ${BOLD}https://claude.com/download${NC} 에서 설치해주세요."
+    echo ""
+    printf "  설치 후 Enter를 누르세요 (또는 링크를 클릭하세요): "
+    read -r </dev/tty
+    open "https://claude.com/download" 2>/dev/null
+    printf "  Claude Desktop 설치를 완료한 후 Enter를 누르세요: "
+    read -r </dev/tty
 
-    if [ -n "$CLAUDE_URL" ]; then
-      log_info "Claude Desktop 다운로드 중..."
-      if curl -fSL -o /tmp/Claude.zip "$CLAUDE_URL"; then
-        log_info "Claude Desktop 설치 중..."
-        unzip -qo /tmp/Claude.zip -d /tmp/Claude_install
-        cp -R /tmp/Claude_install/Claude.app /Applications/
-        rm -rf /tmp/Claude.zip /tmp/Claude_install
-        log_success "Claude Desktop 설치 완료"
-      else
-        log_error "Claude Desktop 다운로드 실패"
-        echo "  → https://claude.ai/download 에서 직접 설치해주세요."
-      fi
+    if [ -d "/Applications/Claude.app" ]; then
+      log_success "Claude Desktop 설치 확인 완료"
     else
-      log_error "Claude Desktop 최신 버전 확인 실패"
-      echo "  → https://claude.ai/download 에서 직접 설치해주세요."
+      log_warn "Claude Desktop이 아직 감지되지 않습니다. 설치 후 계속 진행합니다."
     fi
   fi
 else
-  log_warn "Linux는 Claude Desktop을 공식 지원하지 않습니다. 이 단계를 건너뜁니다."
+  if command -v claude 2>/dev/null | grep -q claude || [ -d "/usr/share/claude" ]; then
+    log_success "Claude Desktop이 이미 설치되어 있습니다."
+  else
+    log_warn "Claude Desktop이 설치되어 있지 않습니다."
+    echo ""
+    echo -e "  → ${BOLD}https://claude.com/download${NC} 에서 설치해주세요."
+    echo ""
+    printf "  설치 후 Enter를 누르세요 (또는 링크를 클릭하세요): "
+    read -r </dev/tty
+    xdg-open "https://claude.com/download" 2>/dev/null || wslview "https://claude.com/download" 2>/dev/null
+    printf "  Claude Desktop 설치를 완료한 후 Enter를 누르세요: "
+    read -r </dev/tty
+    log_warn "설치 확인을 건너뜁니다. 설치 후 계속 진행합니다."
+  fi
 fi
 
 # ── STEP 3: MCP 설정 ──────────────────────────────────────────────────────────
