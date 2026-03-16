@@ -31,45 +31,22 @@ if command -v node &>/dev/null; then
 else
   log_warn "Node.js가 설치되어 있지 않습니다."
 
-  NODE_INSTALLED=false
+  log_info "nvm으로 Node.js 설치 중..."
+  export NVM_DIR="$HOME/.nvm"
 
-  if [ "$OS" = "Darwin" ]; then
-    if command -v brew &>/dev/null; then
-      log_info "Homebrew로 Node.js 설치 중..."
-      if brew install node; then
-        NODE_INSTALLED=true
-      fi
-    else
-      log_error "Homebrew를 찾을 수 없습니다."
-      echo ""
-      echo "  → https://nodejs.org 에서 Node.js를 설치한 후 다시 실행해주세요."
-      exit 1
-    fi
+  # nvm이 이미 설치되어 있으면 로드, 없으면 설치
+  if [ -s "$NVM_DIR/nvm.sh" ]; then
+    . "$NVM_DIR/nvm.sh"
   else
-    # Linux: 패키지 매니저 순서대로 시도
-    if command -v apt-get &>/dev/null; then
-      log_info "apt로 Node.js 설치 중..."
-      sudo apt-get install -y nodejs && NODE_INSTALLED=true
-    elif command -v dnf &>/dev/null; then
-      log_info "dnf로 Node.js 설치 중..."
-      sudo dnf install -y nodejs && NODE_INSTALLED=true
-    elif command -v yum &>/dev/null; then
-      log_info "yum으로 Node.js 설치 중..."
-      sudo yum install -y nodejs && NODE_INSTALLED=true
-    else
-      log_error "패키지 매니저를 찾을 수 없습니다."
-      echo ""
-      echo "  → https://nodejs.org 에서 Node.js를 설치한 후 다시 실행해주세요."
-      exit 1
-    fi
+    curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+    [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
   fi
 
-  if [ "$NODE_INSTALLED" = true ]; then
-    log_success "Node.js 설치 완료"
-    # 설치 후 PATH 갱신
-    export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+  if command -v nvm &>/dev/null; then
+    nvm install --lts
+    log_success "Node.js $(node --version) 설치 완료"
   else
-    log_error "Node.js 설치에 실패했습니다."
+    log_error "nvm 설치에 실패했습니다."
     echo ""
     echo "  → https://nodejs.org 에서 직접 설치해주세요."
     exit 1
@@ -84,21 +61,32 @@ if [ "$OS" = "Darwin" ]; then
     log_success "Claude Desktop이 이미 설치되어 있습니다."
   else
     log_warn "Claude Desktop이 설치되어 있지 않습니다."
-    REPLY=$(ask "자동으로 설치할까요?")
-    if [ "$REPLY" = "y" ] || [ "$REPLY" = "Y" ]; then
-      if command -v brew &>/dev/null; then
-        log_info "Homebrew로 Claude Desktop 설치 중... (관리자 권한이 필요할 수 있습니다)"
-        if brew install --cask claude; then
-          log_success "Claude Desktop 설치 완료"
-        else
-          log_error "Claude Desktop 설치 실패"
-          echo "  → https://claude.ai/download 에서 직접 설치해주세요."
-        fi
-      else
-        echo "  → https://claude.ai/download 에서 직접 설치해주세요."
+    CLAUDE_INSTALLED=false
+
+    if command -v brew &>/dev/null; then
+      log_info "Homebrew로 Claude Desktop 설치 중... (관리자 권한이 필요할 수 있습니다)"
+      if brew install --cask claude; then
+        CLAUDE_INSTALLED=true
       fi
+    fi
+
+    # brew 실패 또는 없으면 curl로 PKG 직접 설치
+    if [ "$CLAUDE_INSTALLED" = false ]; then
+      log_info "공식 사이트에서 Claude Desktop 다운로드 중..."
+      if curl -fSL -o /tmp/Claude.pkg "https://claude.ai/api/desktop/darwin/universal/pkg/latest/redirect"; then
+        log_info "Claude Desktop 설치 중... (관리자 권한이 필요합니다)"
+        if sudo installer -pkg /tmp/Claude.pkg -target /; then
+          CLAUDE_INSTALLED=true
+        fi
+        rm -f /tmp/Claude.pkg
+      fi
+    fi
+
+    if [ "$CLAUDE_INSTALLED" = true ]; then
+      log_success "Claude Desktop 설치 완료"
     else
-      log_info "건너뜁니다. 나중에 https://claude.ai/download 에서 설치해주세요."
+      log_error "Claude Desktop 설치 실패"
+      echo "  → https://claude.ai/download 에서 직접 설치해주세요."
     fi
   fi
 else

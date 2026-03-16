@@ -29,23 +29,36 @@ if (Has-Command "node") {
 } else {
   Write-Warn "Node.js가 설치되어 있지 않습니다."
 
+  $nodeInstalled = $false
+
+  # winget으로 시도
   if (Has-Command "winget") {
     Write-Info "winget으로 Node.js 설치 중..."
     winget install -e --id OpenJS.NodeJS --silent --accept-package-agreements --accept-source-agreements
-
-    # 현재 세션 PATH 갱신 (터미널 재시작 불필요)
     Refresh-Path
+    if (Has-Command "node") { $nodeInstalled = $true }
+  }
 
-    if (Has-Command "node") {
-      Write-Success "Node.js 설치 완료"
-    } else {
-      Write-Fail "Node.js 설치 후에도 인식되지 않습니다."
-      Write-Host "  → 터미널을 재시작한 후 다시 실행해주세요."
-      exit 1
+  # winget 실패 또는 없으면 fnm fallback
+  if (-not $nodeInstalled) {
+    Write-Info "fnm으로 Node.js 설치를 시도합니다..."
+    try {
+      irm https://fnm.vercel.app/install | iex
+      Refresh-Path
+      fnm install --lts
+      fnm use lts-latest
+      Refresh-Path
+      if (Has-Command "node") { $nodeInstalled = $true }
+    } catch {
+      # fnm 설치 실패
     }
+  }
+
+  if ($nodeInstalled) {
+    Write-Success "Node.js $(node --version) 설치 완료"
   } else {
-    Write-Fail "winget을 찾을 수 없습니다."
-    Write-Host "  → https://nodejs.org 에서 Node.js를 설치한 후 다시 실행해주세요."
+    Write-Fail "Node.js 설치에 실패했습니다."
+    Write-Host "  → https://nodejs.org 에서 직접 설치해주세요."
     exit 1
   }
 }
@@ -59,23 +72,36 @@ if (Test-Path $claudePath) {
   Write-Success "Claude Desktop이 이미 설치되어 있습니다."
 } else {
   Write-Warn "Claude Desktop이 설치되어 있지 않습니다."
-  $answer = Read-Host "  자동으로 설치할까요? [y/N]"
+  $claudeInstalled = $false
 
-  if ($answer -eq "y" -or $answer -eq "Y") {
-    if (Has-Command "winget") {
-      Write-Info "winget으로 Claude Desktop 설치 중..."
-      try {
-        winget install -e --id Anthropic.Claude --silent --accept-package-agreements --accept-source-agreements
-        Write-Success "Claude Desktop 설치 완료"
-      } catch {
-        Write-Fail "Claude Desktop 설치 실패"
-        Write-Host "  → https://claude.ai/download 에서 직접 설치해주세요."
-      }
-    } else {
-      Write-Host "  → https://claude.ai/download 에서 직접 설치해주세요."
-    }
+  # winget으로 시도
+  if (Has-Command "winget") {
+    Write-Info "winget으로 Claude Desktop 설치 중..."
+    try {
+      winget install -e --id Anthropic.Claude --silent --accept-package-agreements --accept-source-agreements
+      $claudeInstalled = $true
+    } catch {}
+  }
+
+  # winget 실패 또는 없으면 공식 사이트에서 직접 다운로드
+  if (-not $claudeInstalled) {
+    Write-Info "공식 사이트에서 Claude Desktop 다운로드 중..."
+    try {
+      $arch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "x64" }
+      $installerPath = Join-Path $env:TEMP "Claude-Setup.exe"
+      Invoke-WebRequest -Uri "https://claude.ai/api/desktop/win32/$arch/exe/latest/redirect" -OutFile $installerPath -UseBasicParsing
+      Write-Info "Claude Desktop 설치 중..."
+      Start-Process -FilePath $installerPath -ArgumentList "/S" -Wait
+      Remove-Item $installerPath -Force -ErrorAction SilentlyContinue
+      $claudeInstalled = $true
+    } catch {}
+  }
+
+  if ($claudeInstalled) {
+    Write-Success "Claude Desktop 설치 완료"
   } else {
-    Write-Info "건너뜁니다. 나중에 https://claude.ai/download 에서 설치해주세요."
+    Write-Fail "Claude Desktop 설치 실패"
+    Write-Host "  → https://claude.ai/download 에서 직접 설치해주세요."
   }
 }
 
