@@ -12,7 +12,15 @@ log_success() { echo -e "  ${GREEN}✓${NC}  $1"; }
 log_warn()    { echo -e "  ${YELLOW}⚠${NC}  $1"; }
 log_error()   { echo -e "  ${RED}✗${NC}  $1"; }
 log_step()    { echo -e "\n${BOLD}▶ $1${NC}"; }
-ask()         { printf "  $1 [y/N] "; read -r REPLY </dev/tty; echo "$REPLY"; }
+
+# /dev/tty가 없으면 (CI 등) stdin으로 폴백
+if [ -e /dev/tty ] && [ -r /dev/tty ]; then
+  READ_FROM=/dev/tty
+else
+  READ_FROM=/dev/stdin
+fi
+
+ask()         { printf "  $1 [y/N] "; read -r REPLY <"$READ_FROM" 2>/dev/null; echo "$REPLY"; }
 
 echo ""
 echo -e "  ${BOLD}redash-mcp 설치 마법사${NC}"
@@ -66,10 +74,10 @@ if [ "$OS" = "Darwin" ]; then
     echo -e "  → ${BOLD}https://claude.com/download${NC} 에서 설치해주세요."
     echo ""
     printf "  Enter를 누르면 다운로드 페이지가 열립니다: "
-    read -r </dev/tty
+    read -r <"$READ_FROM"
     open "https://claude.com/download" 2>/dev/null
     printf "  Claude Desktop 설치를 완료한 후 Enter를 누르세요: "
-    read -r </dev/tty
+    read -r <"$READ_FROM"
 
     if [ -d "/Applications/Claude.app" ]; then
       log_success "Claude Desktop 설치 확인 완료"
@@ -86,10 +94,10 @@ else
     echo -e "  → ${BOLD}https://claude.com/download${NC} 에서 설치해주세요."
     echo ""
     printf "  Enter를 누르면 다운로드 페이지가 열립니다: "
-    read -r </dev/tty
+    read -r <"$READ_FROM"
     xdg-open "https://claude.com/download" 2>/dev/null || wslview "https://claude.com/download" 2>/dev/null
     printf "  Claude Desktop 설치를 완료한 후 Enter를 누르세요: "
-    read -r </dev/tty
+    read -r <"$READ_FROM"
     log_warn "설치 확인을 건너뜁니다. 설치 후 계속 진행합니다."
   fi
 fi
@@ -105,7 +113,7 @@ echo "    2) Claude Code (CLI)"
 echo "    3) 둘 다"
 echo ""
 printf "  선택 [1/2/3]: "
-read -r TARGET_CHOICE </dev/tty
+read -r TARGET_CHOICE <"$READ_FROM"
 
 case "$TARGET_CHOICE" in
   1) INSTALL_DESKTOP=true;  INSTALL_CLI=false ;;
@@ -120,7 +128,7 @@ esac
 # Redash URL 입력
 while true; do
   printf "  Redash URL을 입력하세요 (예: https://redash.example.com): "
-  read -r REDASH_URL </dev/tty
+  read -r REDASH_URL <"$READ_FROM"
   if [ -z "$REDASH_URL" ]; then
     log_warn "URL을 입력해주세요."
   elif [[ "$REDASH_URL" != http://* && "$REDASH_URL" != https://* ]]; then
@@ -135,7 +143,7 @@ done
 # Redash API 키 입력
 while true; do
   printf "  Redash API 키를 입력하세요: "
-  read -r REDASH_API_KEY </dev/tty
+  read -r REDASH_API_KEY <"$READ_FROM"
   if [ -z "$REDASH_API_KEY" ]; then
     log_warn "API 키를 입력해주세요."
   else
