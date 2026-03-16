@@ -65,7 +65,7 @@ if [ "$OS" = "Darwin" ]; then
     echo ""
     echo -e "  → ${BOLD}https://claude.com/download${NC} 에서 설치해주세요."
     echo ""
-    printf "  설치 후 Enter를 누르세요 (또는 링크를 클릭하세요): "
+    printf "  Enter를 누르면 다운로드 페이지가 열립니다: "
     read -r </dev/tty
     open "https://claude.com/download" 2>/dev/null
     printf "  Claude Desktop 설치를 완료한 후 Enter를 누르세요: "
@@ -85,7 +85,7 @@ else
     echo ""
     echo -e "  → ${BOLD}https://claude.com/download${NC} 에서 설치해주세요."
     echo ""
-    printf "  설치 후 Enter를 누르세요 (또는 링크를 클릭하세요): "
+    printf "  Enter를 누르면 다운로드 페이지가 열립니다: "
     read -r </dev/tty
     xdg-open "https://claude.com/download" 2>/dev/null || wslview "https://claude.com/download" 2>/dev/null
     printf "  Claude Desktop 설치를 완료한 후 Enter를 누르세요: "
