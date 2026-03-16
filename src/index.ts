@@ -11,12 +11,6 @@ if (process.argv[2] === "setup") {
   process.exit(0);
 }
 
-if (process.argv[2] === "install") {
-  const { main } = await import("./install.js");
-  await main();
-  process.exit(0);
-}
-
 const REDASH_URL = process.env.REDASH_URL?.replace(/\/$/, "");
 const REDASH_API_KEY = process.env.REDASH_API_KEY;
 

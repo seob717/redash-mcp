@@ -83,4 +83,133 @@ if (Test-Path $claudePath) {
 Write-Step "MCP 서버 설정을 시작합니다."
 Write-Host ""
 
-npx --yes redash-mcp setup
+# 설치 대상 선택
+Write-Host "  설치 대상을 선택하세요:" -ForegroundColor White
+Write-Host "    1) Claude Desktop"
+Write-Host "    2) Claude Code (CLI)"
+Write-Host "    3) 둘 다"
+Write-Host ""
+$targetChoice = Read-Host "  선택 [1/2/3]"
+
+switch ($targetChoice) {
+  "1" { $installDesktop = $true;  $installCli = $false }
+  "2" { $installDesktop = $false; $installCli = $true  }
+  "3" { $installDesktop = $true;  $installCli = $true  }
+  default {
+    Write-Fail "올바른 번호를 입력해주세요 (1, 2, 또는 3)."
+    exit 1
+  }
+}
+
+# Redash URL 입력
+$redashUrl = ""
+while ($true) {
+  $redashUrl = Read-Host "  Redash URL을 입력하세요 (예: https://redash.example.com)"
+  if ([string]::IsNullOrWhiteSpace($redashUrl)) {
+    Write-Warn "URL을 입력해주세요."
+  } elseif (-not ($redashUrl.StartsWith("http://") -or $redashUrl.StartsWith("https://"))) {
+    Write-Warn "http:// 또는 https://로 시작해야 합니다."
+  } else {
+    # 마지막 슬래시 제거
+    $redashUrl = $redashUrl.TrimEnd("/")
+    break
+  }
+}
+
+# Redash API 키 입력
+$redashApiKey = ""
+while ($true) {
+  $redashApiKey = Read-Host "  Redash API 키를 입력하세요"
+  if ([string]::IsNullOrWhiteSpace($redashApiKey)) {
+    Write-Warn "API 키를 입력해주세요."
+  } else {
+    break
+  }
+}
+
+# MCP 엔트리 오브젝트 생성
+$mcpEntry = [ordered]@{
+  command = "npx"
+  args    = @("-y", "redash-mcp")
+  env     = [ordered]@{
+    REDASH_URL     = $redashUrl
+    REDASH_API_KEY = $redashApiKey
+  }
+}
+
+# JSON 병합 함수
+function Merge-McpConfig {
+  param(
+    [string]$ConfigPath,
+    [hashtable]$McpEntry
+  )
+
+  # 디렉토리 생성
+  $dir = Split-Path $ConfigPath -Parent
+  if (-not (Test-Path $dir)) {
+    New-Item -ItemType Directory -Path $dir -Force | Out-Null
+  }
+
+  # 기존 설정 읽기 또는 새 오브젝트 생성
+  if (Test-Path $ConfigPath) {
+    $raw = Get-Content $ConfigPath -Raw -Encoding UTF8
+    $config = $raw | ConvertFrom-Json
+    # PSCustomObject를 hashtable로 변환 (병합 가능하도록)
+    $configHash = @{}
+    $config.PSObject.Properties | ForEach-Object { $configHash[$_.Name] = $_.Value }
+  } else {
+    $configHash = @{}
+  }
+
+  # mcpServers 키 확보
+  if (-not $configHash.ContainsKey("mcpServers") -or $null -eq $configHash["mcpServers"]) {
+    $configHash["mcpServers"] = @{}
+  } else {
+    # PSCustomObject -> hashtable 변환
+    $existing = $configHash["mcpServers"]
+    if ($existing -is [System.Management.Automation.PSCustomObject]) {
+      $msHash = @{}
+      $existing.PSObject.Properties | ForEach-Object { $msHash[$_.Name] = $_.Value }
+      $configHash["mcpServers"] = $msHash
+    }
+  }
+
+  # redash-mcp 엔트리 설정
+  $configHash["mcpServers"]["redash-mcp"] = $McpEntry
+
+  # JSON 직렬화 (깊이 100으로 설정해 중첩 객체가 잘리지 않도록)
+  $json = $configHash | ConvertTo-Json -Depth 100
+  [System.IO.File]::WriteAllText($ConfigPath, $json + "`n", [System.Text.Encoding]::UTF8)
+}
+
+# Claude Desktop 설정
+if ($installDesktop) {
+  $desktopConfig = Join-Path $env:APPDATA "Claude\claude_desktop_config.json"
+
+  Write-Info "Claude Desktop 설정 중..."
+  try {
+    Merge-McpConfig -ConfigPath $desktopConfig -McpEntry $mcpEntry
+    Write-Success "Claude Desktop 설정 완료: $desktopConfig"
+  } catch {
+    Write-Fail "Claude Desktop 설정 실패: $_"
+    exit 1
+  }
+}
+
+# Claude Code CLI 설정
+if ($installCli) {
+  $cliConfig = Join-Path $env:USERPROFILE ".claude\settings.json"
+
+  Write-Info "Claude Code (CLI) 설정 중..."
+  try {
+    Merge-McpConfig -ConfigPath $cliConfig -McpEntry $mcpEntry
+    Write-Success "Claude Code (CLI) 설정 완료: $cliConfig"
+  } catch {
+    Write-Fail "Claude Code (CLI) 설정 실패: $_"
+    exit 1
+  }
+}
+
+Write-Host ""
+Write-Success "설치가 완료되었습니다. Claude를 재시작하면 redash-mcp를 사용할 수 있습니다."
+Write-Host ""

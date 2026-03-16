@@ -109,4 +109,152 @@ fi
 log_step "MCP 서버 설정을 시작합니다."
 echo ""
 
-npx --yes redash-mcp setup
+# 설치 대상 선택
+echo -e "  ${BOLD}설치 대상을 선택하세요:${NC}"
+echo "    1) Claude Desktop"
+echo "    2) Claude Code (CLI)"
+echo "    3) 둘 다"
+echo ""
+printf "  선택 [1/2/3]: "
+read -r TARGET_CHOICE </dev/tty
+
+case "$TARGET_CHOICE" in
+  1) INSTALL_DESKTOP=true;  INSTALL_CLI=false ;;
+  2) INSTALL_DESKTOP=false; INSTALL_CLI=true  ;;
+  3) INSTALL_DESKTOP=true;  INSTALL_CLI=true  ;;
+  *)
+    log_error "올바른 번호를 입력해주세요 (1, 2, 또는 3)."
+    exit 1
+    ;;
+esac
+
+# Redash URL 입력
+while true; do
+  printf "  Redash URL을 입력하세요 (예: https://redash.example.com): "
+  read -r REDASH_URL </dev/tty
+  if [ -z "$REDASH_URL" ]; then
+    log_warn "URL을 입력해주세요."
+  elif [[ "$REDASH_URL" != http://* && "$REDASH_URL" != https://* ]]; then
+    log_warn "http:// 또는 https://로 시작해야 합니다."
+  else
+    # 마지막 슬래시 제거
+    REDASH_URL="${REDASH_URL%/}"
+    break
+  fi
+done
+
+# Redash API 키 입력
+while true; do
+  printf "  Redash API 키를 입력하세요: "
+  read -r REDASH_API_KEY </dev/tty
+  if [ -z "$REDASH_API_KEY" ]; then
+    log_warn "API 키를 입력해주세요."
+  else
+    break
+  fi
+done
+
+# JSON 병합 함수 (jq 우선, python3 폴백)
+merge_mcp_config() {
+  local config_path="$1"
+  local url="$2"
+  local api_key="$3"
+
+  # 디렉토리 생성
+  mkdir -p "$(dirname "$config_path")"
+
+  if command -v jq &>/dev/null; then
+    # jq로 병합
+    local tmp
+    tmp="$(mktemp)"
+    if [ -f "$config_path" ]; then
+      jq --arg url "$url" --arg key "$api_key" \
+        '.mcpServers["redash-mcp"] = {
+          "command": "npx",
+          "args": ["-y", "redash-mcp"],
+          "env": {
+            "REDASH_URL": $url,
+            "REDASH_API_KEY": $key
+          }
+        }' "$config_path" > "$tmp"
+    else
+      jq -n --arg url "$url" --arg key "$api_key" \
+        '{
+          "mcpServers": {
+            "redash-mcp": {
+              "command": "npx",
+              "args": ["-y", "redash-mcp"],
+              "env": {
+                "REDASH_URL": $url,
+                "REDASH_API_KEY": $key
+              }
+            }
+          }
+        }' > "$tmp"
+    fi
+    mv "$tmp" "$config_path"
+  elif command -v python3 &>/dev/null; then
+    # python3으로 병합
+    python3 - "$config_path" "$url" "$api_key" <<'PYEOF'
+import sys, json, os
+
+config_path, url, api_key = sys.argv[1], sys.argv[2], sys.argv[3]
+
+config = {}
+if os.path.exists(config_path):
+    with open(config_path, "r", encoding="utf-8") as f:
+        config = json.load(f)
+
+config.setdefault("mcpServers", {})
+config["mcpServers"]["redash-mcp"] = {
+    "command": "npx",
+    "args": ["-y", "redash-mcp"],
+    "env": {
+        "REDASH_URL": url,
+        "REDASH_API_KEY": api_key
+    }
+}
+
+with open(config_path, "w", encoding="utf-8") as f:
+    json.dump(config, f, indent=2, ensure_ascii=False)
+    f.write("\n")
+PYEOF
+  else
+    log_error "jq 또는 python3이 필요합니다. 설치 후 다시 시도해주세요."
+    exit 1
+  fi
+}
+
+# Claude Desktop 설정
+if [ "$INSTALL_DESKTOP" = true ]; then
+  if [ "$OS" = "Darwin" ]; then
+    DESKTOP_CONFIG="$HOME/Library/Application Support/Claude/claude_desktop_config.json"
+  else
+    DESKTOP_CONFIG="$HOME/.config/Claude/claude_desktop_config.json"
+  fi
+
+  log_info "Claude Desktop 설정 중..."
+  if merge_mcp_config "$DESKTOP_CONFIG" "$REDASH_URL" "$REDASH_API_KEY"; then
+    log_success "Claude Desktop 설정 완료: $DESKTOP_CONFIG"
+  else
+    log_error "Claude Desktop 설정 실패"
+    exit 1
+  fi
+fi
+
+# Claude Code CLI 설정
+if [ "$INSTALL_CLI" = true ]; then
+  CLI_CONFIG="$HOME/.claude/settings.json"
+
+  log_info "Claude Code (CLI) 설정 중..."
+  if merge_mcp_config "$CLI_CONFIG" "$REDASH_URL" "$REDASH_API_KEY"; then
+    log_success "Claude Code (CLI) 설정 완료: $CLI_CONFIG"
+  else
+    log_error "Claude Code (CLI) 설정 실패"
+    exit 1
+  fi
+fi
+
+echo ""
+log_success "설치가 완료되었습니다. Claude를 재시작하면 redash-mcp를 사용할 수 있습니다."
+echo ""
