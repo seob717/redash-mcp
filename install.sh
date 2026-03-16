@@ -58,7 +58,7 @@ fi
 log_step "Claude Desktop 확인 중..."
 
 if [ "$OS" = "Darwin" ]; then
-  if [ -d "/Applications/Claude.app" ] || [ -d "$HOME/Applications/Claude.app" ]; then
+  if [ -d "/Applications/Claude.app" ]; then
     log_success "Claude Desktop이 이미 설치되어 있습니다."
   else
     log_warn "Claude Desktop이 설치되어 있지 않습니다."
