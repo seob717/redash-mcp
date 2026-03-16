@@ -44,6 +44,7 @@ else
 
   if command -v nvm &>/dev/null; then
     nvm install --lts
+    nvm alias default node
     log_success "Node.js $(node --version) 설치 완료"
   else
     log_error "nvm 설치에 실패했습니다."
