@@ -1,8 +1,9 @@
 {
+  "manifest_version": "0.3",
   "name": "redash-mcp",
   "version": "3.0.0",
   "description": "MCP server for Redash — query, visualize, and manage your Redash instance with natural language",
-  "author": "Jiro Developers",
+  "author": "seob717",
   "license": "MIT",
   "repository": "https://github.com/seob717/redash-mcp",
   "privacy_policies": [
