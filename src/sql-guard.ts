@@ -63,14 +63,12 @@ export function analyzeQuery(sql: string): SafetyResult {
   const warnings: string[] = [];
   let modifiedQuery: string | undefined;
 
-  // ── Destructive (차단: warn/strict 모두) ────────────────────────────────────
-
   if (/\bDROP\s+(TABLE|DATABASE|SCHEMA|VIEW|INDEX|FUNCTION)\b/.test(upper)) {
     return {
       blocked: true,
       warnings: [],
       message:
-        "🚫 쿼리가 차단되었습니다.\n\n사유: DROP 문은 데이터/스키마를 영구 삭제합니다.\n규칙: DESTRUCTIVE / DROP\n\n해제가 필요하다면 REDASH_SAFETY_MODE=off 로 설정하세요.",
+        "🚫 Query blocked.\n\nReason: DROP statements permanently delete data/schema.\nRule: DESTRUCTIVE / DROP\n\nSet REDASH_SAFETY_MODE=off to disable this check.",
     };
   }
 
@@ -79,7 +77,7 @@ export function analyzeQuery(sql: string): SafetyResult {
       blocked: true,
       warnings: [],
       message:
-        "🚫 쿼리가 차단되었습니다.\n\n사유: TRUNCATE 문은 전체 테이블 데이터를 삭제합니다.\n규칙: DESTRUCTIVE / TRUNCATE",
+        "🚫 Query blocked.\n\nReason: TRUNCATE deletes all data from the table.\nRule: DESTRUCTIVE / TRUNCATE",
     };
   }
 
@@ -88,7 +86,7 @@ export function analyzeQuery(sql: string): SafetyResult {
       blocked: true,
       warnings: [],
       message:
-        "🚫 쿼리가 차단되었습니다.\n\n사유: ALTER TABLE은 스키마 변경으로 사전 협의가 필요합니다.\n규칙: DESTRUCTIVE / ALTER_TABLE",
+        "🚫 Query blocked.\n\nReason: ALTER TABLE modifies schema and requires prior coordination.\nRule: DESTRUCTIVE / ALTER_TABLE",
     };
   }
 
@@ -97,7 +95,7 @@ export function analyzeQuery(sql: string): SafetyResult {
       blocked: true,
       warnings: [],
       message:
-        "🚫 쿼리가 차단되었습니다.\n\n사유: GRANT/REVOKE는 권한 변경으로 허용되지 않습니다.\n규칙: DESTRUCTIVE / PRIVILEGE_CHANGE",
+        "🚫 Query blocked.\n\nReason: GRANT/REVOKE permission changes are not allowed.\nRule: DESTRUCTIVE / PRIVILEGE_CHANGE",
     };
   }
 
@@ -106,7 +104,7 @@ export function analyzeQuery(sql: string): SafetyResult {
       blocked: true,
       warnings: [],
       message:
-        "🚫 쿼리가 차단되었습니다.\n\n사유: WHERE 조건 없는 DELETE는 전체 데이터를 삭제합니다.\n규칙: DESTRUCTIVE / DELETE_WITHOUT_WHERE\n\n안전한 예시:\n  DELETE FROM orders WHERE created_at < '2024-01-01'",
+        "🚫 Query blocked.\n\nReason: DELETE without WHERE clause will delete all rows.\nRule: DESTRUCTIVE / DELETE_WITHOUT_WHERE\n\nSafe example:\n  DELETE FROM orders WHERE created_at < '2024-01-01'",
     };
   }
 
@@ -115,19 +113,17 @@ export function analyzeQuery(sql: string): SafetyResult {
       blocked: true,
       warnings: [],
       message:
-        "🚫 쿼리가 차단되었습니다.\n\n사유: WHERE 조건 없는 UPDATE는 전체 데이터를 수정합니다.\n규칙: DESTRUCTIVE / UPDATE_WITHOUT_WHERE\n\n안전한 예시:\n  UPDATE orders SET status = 'cancelled' WHERE created_at < '2024-01-01'",
+        "🚫 Query blocked.\n\nReason: UPDATE without WHERE clause will modify all rows.\nRule: DESTRUCTIVE / UPDATE_WITHOUT_WHERE\n\nSafe example:\n  UPDATE orders SET status = 'cancelled' WHERE created_at < '2024-01-01'",
     };
   }
 
-  // DELETE/UPDATE with WHERE — 경고만
   if (/\bDELETE\s+FROM\b/.test(upper)) {
-    warnings.push("[DESTRUCTIVE] DELETE 쿼리입니다. WHERE 조건을 다시 확인하세요.");
+    warnings.push("[DESTRUCTIVE] DELETE query detected. Please verify the WHERE clause.");
   }
   if (/\bUPDATE\b/.test(upper) && /\bSET\b/.test(upper)) {
-    warnings.push("[DESTRUCTIVE] UPDATE 쿼리입니다. WHERE 조건을 다시 확인하세요.");
+    warnings.push("[DESTRUCTIVE] UPDATE query detected. Please verify the WHERE clause.");
   }
 
-  // ── Cost (warn: 경고 후 실행, strict: 차단) ────────────────────────────────
   if (!config.disableCost && isSelect(sql)) {
     const hasSelectStar = /SELECT\s+\*/.test(upper) || /SELECT\s+[\w.]+\.\*/.test(upper);
     const noWhere = !hasWhere(upper);
@@ -135,23 +131,23 @@ export function analyzeQuery(sql: string): SafetyResult {
 
     if (hasSelectStar) {
       warnings.push(
-        "[COST] SELECT *를 사용하고 있습니다. 필요한 컬럼만 명시하면 BigQuery 스캔 비용을 줄일 수 있습니다."
+        "[COST] SELECT * detected. Specify only needed columns to reduce scan costs."
       );
     }
     if (noWhere) {
       warnings.push(
-        "[COST] WHERE 조건이 없습니다. 날짜 또는 조건 필터를 추가하는 것을 권장합니다."
+        "[COST] No WHERE clause. Consider adding date or condition filters."
       );
     }
     if (noLimit) {
       if (config.autoLimit > 0) {
         modifiedQuery = injectLimit(sql, config.autoLimit);
         warnings.push(
-          `[COST] LIMIT이 없어 자동으로 LIMIT ${config.autoLimit}을 추가했습니다. 전체 조회가 필요하면 명시적으로 LIMIT을 지정하세요.`
+          `[COST] No LIMIT clause — auto-appended LIMIT ${config.autoLimit}. Specify an explicit LIMIT if you need all rows.`
         );
       } else {
         warnings.push(
-          "[COST] LIMIT이 없습니다. 대용량 테이블에서는 전체 데이터가 반환되어 비용이 발생할 수 있습니다."
+          "[COST] No LIMIT clause. Full table scans on large tables may incur significant costs."
         );
       }
     }
@@ -162,13 +158,12 @@ export function analyzeQuery(sql: string): SafetyResult {
         return {
           blocked: true,
           warnings: [],
-          message: `🚫 쿼리가 차단되었습니다 (strict 모드).\n\n${costWarnings.join("\n")}\n\nwarn 모드로 변경하려면 REDASH_SAFETY_MODE=warn 으로 설정하세요.`,
+          message: `🚫 Query blocked (strict mode).\n\n${costWarnings.join("\n")}\n\nSet REDASH_SAFETY_MODE=warn to allow with warnings.`,
         };
       }
     }
   }
 
-  // ── PII (warn: 경고 후 실행, strict: 차단) ────────────────────────────────
   if (!config.disablePii) {
     const piiPatterns = [
       "EMAIL",
@@ -179,15 +174,11 @@ export function analyzeQuery(sql: string): SafetyResult {
       "SOCIAL_SECURITY",
       "CREDIT_CARD",
       "CARD_NUMBER",
-      "주민",
-      "휴대폰",
-      "핸드폰",
-      "생년월일",
     ];
     const matched = piiPatterns.filter((k) => upper.includes(k));
     if (matched.length > 0) {
       warnings.push(
-        `[PII] 민감 정보 관련 컬럼이 감지되었습니다: ${matched.join(", ")}. 개인정보 처리 규정을 확인하세요.`
+        `[PII] Sensitive data columns detected: ${matched.join(", ")}. Please verify your data privacy compliance.`
       );
     }
 
@@ -197,7 +188,7 @@ export function analyzeQuery(sql: string): SafetyResult {
         return {
           blocked: true,
           warnings: [],
-          message: `🚫 쿼리가 차단되었습니다 (strict 모드).\n\n${piiWarnings.join("\n")}\n\nwarn 모드로 변경하려면 REDASH_SAFETY_MODE=warn 으로 설정하세요.`,
+          message: `🚫 Query blocked (strict mode).\n\n${piiWarnings.join("\n")}\n\nSet REDASH_SAFETY_MODE=warn to allow with warnings.`,
         };
       }
     }
@@ -205,7 +196,7 @@ export function analyzeQuery(sql: string): SafetyResult {
 
   const message =
     warnings.length > 0
-      ? `⚠️ 안전 경고 (쿼리는 실행됩니다)\n\n${warnings.join("\n")}\n\n---`
+      ? `⚠️ Safety warnings (query will still execute)\n\n${warnings.join("\n")}\n\n---`
       : "";
 
   return { blocked: false, warnings, message, modifiedQuery };

@@ -37,10 +37,10 @@ function getClaudeCodeConfigPath(): string {
 }
 
 export async function main() {
-  p.intro("redash-mcp 설치 마법사");
+  p.intro("redash-mcp setup wizard");
 
   const targets = await p.multiselect({
-    message: "설치 대상을 선택하세요 (스페이스바로 선택, 엔터로 확인)",
+    message: "Select installation targets (space to select, enter to confirm)",
     options: [
       { value: "desktop", label: "Claude Desktop" },
       { value: "cli", label: "Claude Code (CLI)" },
@@ -49,34 +49,34 @@ export async function main() {
   });
 
   if (p.isCancel(targets)) {
-    p.cancel("설치가 취소되었습니다.");
+    p.cancel("Setup cancelled.");
     process.exit(0);
   }
 
   const redashUrl = await p.text({
-    message: "Redash URL을 입력하세요",
+    message: "Enter your Redash URL",
     placeholder: "https://redash.example.com",
     validate(value: string | undefined) {
-      if (!value) return "URL을 입력해주세요.";
+      if (!value) return "URL is required.";
       if (!value.startsWith("http://") && !value.startsWith("https://"))
-        return "http:// 또는 https://로 시작해야 합니다.";
+        return "Must start with http:// or https://";
     },
   });
 
   if (p.isCancel(redashUrl)) {
-    p.cancel("설치가 취소되었습니다.");
+    p.cancel("Setup cancelled.");
     process.exit(0);
   }
 
   const apiKey = await p.text({
-    message: "Redash API 키를 입력하세요",
+    message: "Enter your Redash API key",
     validate(value: string | undefined) {
-      if (!value) return "API 키를 입력해주세요.";
+      if (!value) return "API key is required.";
     },
   });
 
   if (p.isCancel(apiKey)) {
-    p.cancel("설치가 취소되었습니다.");
+    p.cancel("Setup cancelled.");
     process.exit(0);
   }
 
@@ -95,18 +95,18 @@ export async function main() {
   const s = p.spinner();
 
   if (targets.includes("desktop")) {
-    s.start("Claude Desktop 설정 중...");
+    s.start("Configuring Claude Desktop...");
     setupDesktop(mcpEntry);
-    s.stop("Claude Desktop 설정 완료");
+    s.stop("Claude Desktop configured");
   }
 
   if (targets.includes("cli")) {
-    s.start("Claude Code (CLI) 설정 중...");
+    s.start("Configuring Claude Code (CLI)...");
     setupClaudeCode(mcpEntry);
-    s.stop("Claude Code (CLI) 설정 완료");
+    s.stop("Claude Code (CLI) configured");
   }
 
-  p.outro("설치가 완료되었습니다. 재시작 후 사용할 수 있습니다.");
+  p.outro("Setup complete. Restart to start using redash-mcp.");
 }
 
 function setupDesktop(mcpEntry: any) {
@@ -118,7 +118,7 @@ function setupDesktop(mcpEntry: any) {
       config = JSON.parse(fs.readFileSync(configPath, "utf8"));
       config.mcpServers ??= {};
     } catch {
-      throw new Error(`claude_desktop_config.json 파일을 읽을 수 없습니다: ${configPath}`);
+      throw new Error(`Failed to read claude_desktop_config.json: ${configPath}`);
     }
   } else {
     fs.mkdirSync(path.dirname(configPath), { recursive: true });
@@ -136,7 +136,7 @@ function setupClaudeCode(mcpEntry: any) {
     try {
       config = JSON.parse(fs.readFileSync(configPath, "utf8"));
     } catch {
-      throw new Error(`Claude Code settings.json 파일을 읽을 수 없습니다: ${configPath}`);
+      throw new Error(`Failed to read Claude Code settings.json: ${configPath}`);
     }
   } else {
     fs.mkdirSync(path.dirname(configPath), { recursive: true });

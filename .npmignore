@@ -1,5 +1,11 @@
 src/
 .claude/
 .omc/
+.idea/
+.github/
+docs/
+install.sh
+install.ps1
 *.tgz
 tsconfig.json
+.gitattributes

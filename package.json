@@ -1,7 +1,13 @@
 {
   "name": "redash-mcp",
-  "version": "2.2.2",
+  "version": "3.0.0",
   "description": "MCP server for Redash",
+  "license": "MIT",
+  "author": "Jiro Developers",
+  "keywords": ["mcp", "redash", "sql", "bi", "dashboard", "model-context-protocol"],
+  "engines": {
+    "node": ">=18"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/jiro-developers/redash-mcp.git"

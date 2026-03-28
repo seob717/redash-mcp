@@ -4,6 +4,8 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { analyzeQuery } from "./sql-guard.js";
 import { getCached, setCached } from "./query-cache.js";
+import { REDASH_URL, REDASH_API_KEY, redashFetch, pollQueryResult, formatAsMarkdownTable, fetchSchema } from "./redash-client.js";
+import { registerBirdTools } from "./bird/tools.js";
 
 if (process.argv[2] === "setup") {
   const { main } = await import("./setup.js");
@@ -11,85 +13,19 @@ if (process.argv[2] === "setup") {
   process.exit(0);
 }
 
-const REDASH_URL = process.env.REDASH_URL?.replace(/\/$/, "");
-const REDASH_API_KEY = process.env.REDASH_API_KEY;
-
 if (!REDASH_URL || !REDASH_API_KEY) {
   console.error("REDASH_URL and REDASH_API_KEY environment variables are required");
   process.exit(1);
 }
 
-async function redashFetch(path: string, options?: RequestInit) {
-  const res = await fetch(`${REDASH_URL}/api${path}`, {
-    ...options,
-    headers: {
-      "Authorization": `Key ${REDASH_API_KEY}`,
-      "Content-Type": "application/json",
-      ...options?.headers,
-    },
-  });
-  if (!res.ok) {
-    let hint = "";
-    if (res.status === 401) hint = " (REDASH_API_KEY를 확인하세요)";
-    else if (res.status === 403) hint = " (해당 리소스에 대한 접근 권한이 없습니다)";
-    else if (res.status === 404) hint = " (리소스를 찾을 수 없습니다. ID를 확인하세요)";
-    throw new Error(`Redash API error: ${res.status} ${res.statusText}${hint}`);
-  }
-  if (res.status === 204 || res.headers.get("content-length") === "0") {
-    return null;
-  }
-  return res.json();
-}
-
-async function pollQueryResult(jobId: string, timeoutSecs = 30): Promise<any> {
-  for (let i = 0; i < timeoutSecs; i++) {
-    const job = await redashFetch(`/jobs/${jobId}`);
-    if (job.job.status === 3) { // 3 = success
-      return await redashFetch(`/query_results/${job.job.query_result_id}`);
-    }
-    if (job.job.status === 4) { // 4 = failure
-      throw new Error(`Query failed: ${job.job.error}`);
-    }
-    await new Promise((r) => setTimeout(r, 1000));
-  }
-  throw new Error(`Query timed out after ${timeoutSecs}s`);
-}
-
-function formatAsMarkdownTable(columns: string[], rows: any[]): string {
-  const escape = (s: string) => s.replace(/\|/g, "\\|");
-  const header = `| ${columns.map(escape).join(" | ")} |`;
-  const separator = `| ${columns.map(() => "---").join(" | ")} |`;
-  const body = rows
-    .map((row) => `| ${columns.map((c) => escape(String(row[c] ?? ""))).join(" | ")} |`)
-    .join("\n");
-  return `${header}\n${separator}\n${body}`;
-}
-
-// Schema cache: data_source_id → { schema, timestamp }
-const schemaCache = new Map<number, { schema: any[]; ts: number }>();
-const CACHE_TTL_MS = 10 * 60 * 1000; // 10분
-
-async function fetchSchema(dataSourceId: number): Promise<any[]> {
-  const cached = schemaCache.get(dataSourceId);
-  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
-    return cached.schema;
-  }
-  const result = await redashFetch(`/data_sources/${dataSourceId}/schema`);
-  const schema = result.schema ?? [];
-  schemaCache.set(dataSourceId, { schema, ts: Date.now() });
-  return schema;
-}
-
 const server = new McpServer({
   name: "redash-mcp",
-  version: "2.0.2",
+  version: "3.0.0",
 });
-
-// ─── Data Sources ────────────────────────────────────────────────────────────
 
 server.tool(
   "list_data_sources",
-  "Redash에 연결된 데이터소스 목록(id, name, type)을 반환합니다. 항상 이 툴을 먼저 호출해 data_source_id를 확인하세요.",
+  "List connected data sources (id, name, type). Call this first to get data_source_id.",
   {},
   async () => {
     const data = await redashFetch("/data_sources");
@@ -104,14 +40,12 @@ server.tool(
   }
 );
 
-// ─── Schema ───────────────────────────────────────────────────────────────────
-
 server.tool(
   "list_tables",
-  "데이터소스의 테이블 목록을 반환합니다. keyword로 관련 테이블을 검색할 수 있습니다. SQL 작성 전 반드시 이 툴로 테이블명을 확인하고, get_table_columns로 컬럼을 확인하세요.",
+  "List tables in a data source. Use keyword to filter by name. Verify table names here before writing SQL.",
   {
-    data_source_id: z.number().describe("list_data_sources로 확인한 데이터소스 ID"),
-    keyword: z.string().optional().describe("테이블명 검색 키워드 (예: 'user', 'order')"),
+    data_source_id: z.number().describe("Data source ID from list_data_sources"),
+    keyword: z.string().optional().describe("Filter keyword for table names (e.g., 'user', 'order')"),
   },
   async ({ data_source_id, keyword }) => {
     const schema = await fetchSchema(data_source_id);
@@ -119,7 +53,7 @@ server.tool(
     if (keyword) {
       tables = tables.filter((name: string) => name.toLowerCase().includes(keyword.toLowerCase()));
     }
-    const summary = `총 ${tables.length}개 테이블${keyword ? ` ('${keyword}' 포함)` : ""}\n\n${tables.join("\n")}`;
+    const summary = `${tables.length} tables${keyword ? ` (matching '${keyword}')` : ""}\n\n${tables.join("\n")}`;
     return {
       content: [{ type: "text", text: summary }],
     };
@@ -128,10 +62,10 @@ server.tool(
 
 server.tool(
   "get_table_columns",
-  "테이블의 컬럼명과 타입을 반환합니다. 쉼표로 여러 테이블을 동시에 조회할 수 있습니다. SQL 작성 전 실제 컬럼명을 반드시 확인하세요.",
+  "Get column names and types for one or more tables (comma-separated). Verify columns before writing SQL.",
   {
-    data_source_id: z.number().describe("list_data_sources로 확인한 데이터소스 ID"),
-    table_name: z.string().describe("테이블명, 쉼표로 여러 개 가능 (예: 'users' 또는 'users,orders')"),
+    data_source_id: z.number().describe("Data source ID from list_data_sources"),
+    table_name: z.string().describe("Table name(s), comma-separated (e.g., 'users' or 'users,orders')"),
   },
   async ({ data_source_id, table_name }) => {
     const schema = await fetchSchema(data_source_id);
@@ -144,7 +78,7 @@ server.tool(
         table = schema.find((t: any) => t.name.toLowerCase().includes(name.toLowerCase()));
       }
       if (!table) {
-        results.push(`테이블 '${name}'을 찾을 수 없습니다. list_tables로 정확한 테이블명을 확인하세요.`);
+        results.push(`Table '${name}' not found. Use list_tables to verify the table name.`);
         continue;
       }
       const cols = (table.columns ?? []).map((c: any) => `${c.name} (${c.type ?? "unknown"})`).join("\n");
@@ -157,39 +91,34 @@ server.tool(
   }
 );
 
-// ─── Query Execution ──────────────────────────────────────────────────────────
-
 const DEFAULT_MAX_AGE = parseInt(process.env.REDASH_DEFAULT_MAX_AGE ?? "0", 10) || 0;
 
 server.tool(
   "run_query",
-  "SQL을 데이터소스에 직접 실행하고 결과를 반환합니다. SQL 작성 전 list_tables → get_table_columns로 스키마를 먼저 확인하세요.",
+  "Execute SQL against a data source and return results. Check schema with list_tables and get_table_columns first.",
   {
-    data_source_id: z.number().describe("list_data_sources로 확인한 데이터소스 ID"),
-    query: z.string().describe("실행할 SQL 쿼리"),
-    max_age: z.number().optional().describe("Redash 캐시 유지 시간(초). 미지정 시 REDASH_DEFAULT_MAX_AGE 환경변수 사용"),
-    max_rows: z.number().optional().default(100).describe("반환할 최대 행 수 (기본 100)"),
-    format: z.enum(["table", "json"]).optional().default("table").describe("결과 포맷: table(마크다운) 또는 json"),
-    timeout_secs: z.number().optional().default(30).describe("쿼리 실행 타임아웃(초)"),
+    data_source_id: z.number().describe("Data source ID from list_data_sources"),
+    query: z.string().describe("SQL query to execute"),
+    max_age: z.number().optional().describe("Redash cache TTL in seconds. Defaults to REDASH_DEFAULT_MAX_AGE env var"),
+    max_rows: z.number().optional().default(100).describe("Max rows to return (default 100)"),
+    format: z.enum(["table", "json"]).optional().default("table").describe("Output format: table (markdown) or json"),
+    timeout_secs: z.number().optional().default(30).describe("Query execution timeout in seconds"),
   },
   async ({ data_source_id, query, max_age, max_rows, format, timeout_secs }) => {
-    // 1. SQL 안전 가드
     const guard = analyzeQuery(query);
     if (guard.blocked) {
       return { content: [{ type: "text", text: guard.message }] };
     }
 
-    // auto-LIMIT이 적용된 경우 변환된 쿼리 사용
     const effectiveQuery = guard.modifiedQuery ?? query;
     const effectiveMaxAge = max_age ?? DEFAULT_MAX_AGE;
 
-    // 2. MCP 레이어 캐시 조회
     const cached = getCached(data_source_id, effectiveQuery);
     if (cached) {
       const { rows, columns, warningPrefix } = cached;
       const displayRows = rows.slice(0, max_rows);
       const truncated = rows.length > max_rows
-        ? `\n⚠️ 전체 ${rows.length}행 중 ${max_rows}행만 표시합니다.`
+        ? `\n⚠️ Showing ${max_rows} of ${rows.length} rows.`
         : "";
       let body: string;
       if (format === "json") {
@@ -197,18 +126,17 @@ server.tool(
       } else {
         body = formatAsMarkdownTable(columns, displayRows);
       }
-      const cacheNote = "📦 MCP 캐시에서 반환된 결과입니다.\n\n";
+      const cacheNote = "Returned from MCP cache.\n\n";
       return {
         content: [
           {
             type: "text",
-            text: `${warningPrefix}${cacheNote}총 ${rows.length}행 | 컬럼: ${columns.join(", ")}${truncated}\n\n${body}`,
+            text: `${warningPrefix}${cacheNote}${rows.length} rows | Columns: ${columns.join(", ")}${truncated}\n\n${body}`,
           },
         ],
       };
     }
 
-    // 3. Redash API 호출
     const res = await redashFetch("/query_results", {
       method: "POST",
       body: JSON.stringify({ data_source_id, query: effectiveQuery, max_age: effectiveMaxAge }),
@@ -225,13 +153,12 @@ server.tool(
     const rows = qr.data.rows;
     const columns = qr.data.columns.map((c: any) => c.name);
 
-    // 4. MCP 캐시에 저장
     const warningPrefix = guard.message ? `${guard.message}\n\n` : "";
     setCached(data_source_id, effectiveQuery, { rows, columns, warningPrefix });
 
     const displayRows = rows.slice(0, max_rows);
     const truncated = rows.length > max_rows
-      ? `\n⚠️ 전체 ${rows.length}행 중 ${max_rows}행만 표시합니다.`
+      ? `\n⚠️ Showing ${max_rows} of ${rows.length} rows.`
       : "";
 
     let body: string;
@@ -245,20 +172,18 @@ server.tool(
       content: [
         {
           type: "text",
-          text: `${warningPrefix}총 ${rows.length}행 | 컬럼: ${columns.join(", ")}${truncated}\n\n${body}`,
+          text: `${warningPrefix}${rows.length} rows | Columns: ${columns.join(", ")}${truncated}\n\n${body}`,
         },
       ],
     };
   }
 );
 
-// ─── Saved Queries ────────────────────────────────────────────────────────────
-
 server.tool(
   "list_queries",
-  "Redash에 저장된 쿼리 목록을 조회합니다.",
+  "List saved queries in Redash.",
   {
-    search: z.string().optional().describe("검색어"),
+    search: z.string().optional().describe("Search keyword"),
     page: z.number().optional().default(1),
     page_size: z.number().optional().default(20),
   },
@@ -284,11 +209,11 @@ server.tool(
 
 server.tool(
   "get_query_result",
-  "저장된 Redash 쿼리를 ID로 실행하고 결과를 반환합니다.",
+  "Execute a saved query by ID and return results.",
   {
-    query_id: z.number().describe("저장된 쿼리 ID (list_queries로 확인)"),
-    max_rows: z.number().optional().default(100).describe("반환할 최대 행 수 (기본 100)"),
-    format: z.enum(["table", "json"]).optional().default("table").describe("결과 포맷: table(마크다운) 또는 json"),
+    query_id: z.number().describe("Saved query ID (from list_queries)"),
+    max_rows: z.number().optional().default(100).describe("Max rows to return (default 100)"),
+    format: z.enum(["table", "json"]).optional().default("table").describe("Output format: table (markdown) or json"),
   },
   async ({ query_id, max_rows, format }) => {
     const res = await redashFetch(`/queries/${query_id}/results`, {
@@ -308,7 +233,7 @@ server.tool(
     const columns = qr.data.columns.map((c: any) => c.name);
     const displayRows = rows.slice(0, max_rows);
     const truncated = rows.length > max_rows
-      ? `\n⚠️ 전체 ${rows.length}행 중 ${max_rows}행만 표시합니다.`
+      ? `\n⚠️ Showing ${max_rows} of ${rows.length} rows.`
       : "";
 
     let body: string;
@@ -322,7 +247,7 @@ server.tool(
       content: [
         {
           type: "text",
-          text: `쿼리 ID: ${query_id}\n총 ${rows.length}행 | 컬럼: ${columns.join(", ")}${truncated}\n\n${body}`,
+          text: `Query ID: ${query_id}\n${rows.length} rows | Columns: ${columns.join(", ")}${truncated}\n\n${body}`,
         },
       ],
     };
@@ -331,9 +256,9 @@ server.tool(
 
 server.tool(
   "get_query",
-  "저장된 쿼리의 상세 정보(SQL, 시각화, 태그 등)를 반환합니다.",
+  "Get saved query details (SQL, visualizations, tags).",
   {
-    query_id: z.number().describe("쿼리 ID (list_queries로 확인)"),
+    query_id: z.number().describe("Query ID (from list_queries)"),
   },
   async ({ query_id }) => {
     const data = await redashFetch(`/queries/${query_id}`);
@@ -359,13 +284,13 @@ server.tool(
 
 server.tool(
   "create_query",
-  "새 쿼리를 Redash에 저장합니다.",
+  "Save a new query to Redash.",
   {
-    name: z.string().describe("쿼리 이름"),
-    query: z.string().describe("SQL 쿼리"),
-    data_source_id: z.number().describe("데이터소스 ID (list_data_sources로 확인)"),
-    description: z.string().optional().describe("쿼리 설명"),
-    tags: z.array(z.string()).optional().describe("태그 목록"),
+    name: z.string().describe("Query name"),
+    query: z.string().describe("SQL query"),
+    data_source_id: z.number().describe("Data source ID from list_data_sources"),
+    description: z.string().optional().describe("Query description"),
+    tags: z.array(z.string()).optional().describe("Tags"),
   },
   async ({ name, query, data_source_id, description, tags }) => {
     const body: Record<string, unknown> = { name, query, data_source_id };
@@ -388,13 +313,13 @@ server.tool(
 
 server.tool(
   "update_query",
-  "저장된 쿼리의 이름, SQL, 설명, 태그를 수정합니다.",
+  "Update a saved query's name, SQL, description, or tags.",
   {
-    query_id: z.number().describe("수정할 쿼리 ID"),
-    name: z.string().optional().describe("새 이름"),
-    query: z.string().optional().describe("새 SQL"),
-    description: z.string().optional().describe("새 설명"),
-    tags: z.array(z.string()).optional().describe("새 태그 목록"),
+    query_id: z.number().describe("Query ID to update"),
+    name: z.string().optional().describe("New name"),
+    query: z.string().optional().describe("New SQL"),
+    description: z.string().optional().describe("New description"),
+    tags: z.array(z.string()).optional().describe("New tags"),
   },
   async ({ query_id, name, query, description, tags }) => {
     const body: Record<string, unknown> = {};
@@ -419,9 +344,9 @@ server.tool(
 
 server.tool(
   "fork_query",
-  "기존 쿼리를 복제(fork)합니다.",
+  "Fork (duplicate) an existing query.",
   {
-    query_id: z.number().describe("복제할 쿼리 ID"),
+    query_id: z.number().describe("Query ID to fork"),
   },
   async ({ query_id }) => {
     const data = await redashFetch(`/queries/${query_id}/fork`, {
@@ -441,25 +366,23 @@ server.tool(
 
 server.tool(
   "archive_query",
-  "쿼리를 아카이브(삭제)합니다. 복구 불가합니다.",
+  "Archive (delete) a query. This action is irreversible.",
   {
-    query_id: z.number().describe("아카이브할 쿼리 ID"),
+    query_id: z.number().describe("Query ID to archive"),
   },
   async ({ query_id }) => {
     await redashFetch(`/queries/${query_id}`, { method: "DELETE" });
     return {
-      content: [{ type: "text", text: `쿼리 ${query_id}가 아카이브되었습니다.` }],
+      content: [{ type: "text", text: `Query ${query_id} has been archived.` }],
     };
   }
 );
 
-// ─── Dashboards ───────────────────────────────────────────────────────────────
-
 server.tool(
   "list_dashboards",
-  "Redash 대시보드 목록을 조회합니다.",
+  "List dashboards in Redash.",
   {
-    search: z.string().optional().describe("검색어"),
+    search: z.string().optional().describe("Search keyword"),
     page: z.number().optional().default(1),
     page_size: z.number().optional().default(20),
   },
@@ -485,9 +408,9 @@ server.tool(
 
 server.tool(
   "get_dashboard",
-  "대시보드 상세 정보와 위젯(시각화) 목록을 반환합니다.",
+  "Get dashboard details including widgets and visualizations.",
   {
-    dashboard_id_or_slug: z.string().describe("대시보드 ID 또는 slug (list_dashboards로 확인)"),
+    dashboard_id_or_slug: z.string().describe("Dashboard ID or slug (from list_dashboards)"),
   },
   async ({ dashboard_id_or_slug }) => {
     const data = await redashFetch(`/dashboards/${dashboard_id_or_slug}`);
@@ -515,9 +438,9 @@ server.tool(
 
 server.tool(
   "create_dashboard",
-  "새 대시보드를 생성합니다.",
+  "Create a new dashboard.",
   {
-    name: z.string().describe("대시보드 이름"),
+    name: z.string().describe("Dashboard name"),
   },
   async ({ name }) => {
     const data = await redashFetch("/dashboards", {
@@ -537,12 +460,12 @@ server.tool(
 
 server.tool(
   "add_widget",
-  "대시보드에 시각화 위젯을 추가합니다. visualization_id는 get_query로 확인하세요.",
+  "Add a visualization widget to a dashboard. Get visualization_id from get_query.",
   {
-    dashboard_id: z.number().describe("대시보드 ID"),
-    visualization_id: z.number().describe("추가할 시각화 ID (get_query의 visualizations에서 확인)"),
-    text: z.string().optional().default("").describe("위젯 텍스트"),
-    width: z.number().optional().default(1).describe("위젯 너비 (1 또는 2)"),
+    dashboard_id: z.number().describe("Dashboard ID"),
+    visualization_id: z.number().describe("Visualization ID (from get_query's visualizations)"),
+    text: z.string().optional().default("").describe("Widget text"),
+    width: z.number().optional().default(1).describe("Widget width (1 or 2)"),
   },
   async ({ dashboard_id, visualization_id, text, width }) => {
     const data = await redashFetch("/widgets", {
@@ -566,11 +489,9 @@ server.tool(
   }
 );
 
-// ─── Alerts ───────────────────────────────────────────────────────────────────
-
 server.tool(
   "list_alerts",
-  "Redash 알림(Alert) 목록을 조회합니다.",
+  "List alerts in Redash.",
   {},
   async () => {
     const data = await redashFetch("/alerts");
@@ -591,9 +512,9 @@ server.tool(
 
 server.tool(
   "get_alert",
-  "특정 알림의 상세 정보(임계값, 대상 쿼리, 상태)를 반환합니다.",
+  "Get alert details (threshold, linked query, state).",
   {
-    alert_id: z.number().describe("알림 ID (list_alerts로 확인)"),
+    alert_id: z.number().describe("Alert ID (from list_alerts)"),
   },
   async ({ alert_id }) => {
     const alert = await redashFetch(`/alerts/${alert_id}`);
@@ -620,14 +541,14 @@ server.tool(
 
 server.tool(
   "create_alert",
-  "새 알림을 생성합니다. 쿼리 결과의 특정 컬럼값이 임계값을 초과하면 알림을 발생시킵니다.",
+  "Create a new alert. Triggers when a query result column crosses a threshold.",
   {
-    name: z.string().describe("알림 이름"),
-    query_id: z.number().describe("모니터링할 쿼리 ID"),
-    column: z.string().describe("모니터링할 컬럼명"),
-    op: z.enum(["greater than", "less than", "equals"]).describe("비교 연산자"),
-    value: z.number().describe("임계값"),
-    rearm: z.number().optional().default(0).describe("재알림 간격(초), 0은 한번만"),
+    name: z.string().describe("Alert name"),
+    query_id: z.number().describe("Query ID to monitor"),
+    column: z.string().describe("Column name to monitor"),
+    op: z.enum(["greater than", "less than", "equals"]).describe("Comparison operator"),
+    value: z.number().describe("Threshold value"),
+    rearm: z.number().optional().default(0).describe("Rearm interval in seconds (0 = fire once)"),
   },
   async ({ name, query_id, column, op, value, rearm }) => {
     const data = await redashFetch("/alerts", {
@@ -649,6 +570,9 @@ server.tool(
     };
   }
 );
+
+
+registerBirdTools(server);
 
 const transport = new StdioServerTransport();
 await server.connect(transport);

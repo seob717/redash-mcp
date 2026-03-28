@@ -62,10 +62,8 @@ export function setCached(dataSourceId: number, sql: string, result: any): void 
   const maxSize = getMaxSizeBytes();
   const size = roughSize(result);
 
-  // 단일 결과가 전체 한도의 20% 초과 시 캐시하지 않음
   if (size > maxSize * 0.2) return;
 
-  // 한도 초과 시 오래된 항목부터 제거
   while (totalSizeBytes + size > maxSize && cache.size > 0) {
     const oldestKey = cache.keys().next().value;
     if (!oldestKey) break;
