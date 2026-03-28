@@ -1,9 +1,10 @@
 import { fetchSchema } from "../redash-client.js";
 import { loadConfig } from "./config.js";
 import { loadExamples, findRelevantExamples, formatExamplesForPrompt } from "./few-shot.js";
-import { pruneSchema, formatPrunedSchema } from "./schema-pruning.js";
+import { pruneSchema, formatPrunedSchema, type SchemaTable } from "./schema-pruning.js";
 import { assessComplexity } from "./complexity.js";
 import { getEffectiveMap } from "./keyword-map.js";
+import { isLLMAvailable, selectTablesWithLLM } from "./llm-table-selector.js";
 import type { SmartQueryResponse } from "./types.js";
 
 export async function handleSmartQuery(params: {
@@ -22,10 +23,12 @@ export async function handleSmartQuery(params: {
 
   const keywordMap = await getEffectiveMap(data_source_id);
 
+  const combinedQuestion = context ? `${question} ${context}` : question;
+
   let prunedTables;
   if (config.bird.schemaPruning.enabled) {
     prunedTables = pruneSchema(
-      context ? `${question} ${context}` : question,
+      combinedQuestion,
       fullSchema,
       allExamples,
       config.bird.schemaPruning.topK,
@@ -37,6 +40,26 @@ export async function handleSmartQuery(params: {
       columns: t.columns ?? [],
       score: 0,
     }));
+  }
+
+  // LLM fallback: when token matching fails to find relevant tables
+  const maxScore = Math.max(...prunedTables.map((t) => t.score), 0);
+  if (maxScore === 0 && isLLMAvailable()) {
+    const llmSelected = await selectTablesWithLLM(
+      combinedQuestion,
+      fullSchema,
+      config.bird.schemaPruning.topK,
+    );
+    if (llmSelected.length > 0) {
+      const selectedSet = new Set(llmSelected);
+      prunedTables = fullSchema
+        .filter((t: SchemaTable) => selectedSet.has(t.name))
+        .map((t: SchemaTable) => ({
+          name: t.name,
+          columns: t.columns ?? [],
+          score: 1,
+        }));
+    }
   }
 
   if (!context) {

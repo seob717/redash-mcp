@@ -1,101 +1,80 @@
 # redash-mcp
 
-[Redash](https://redash.io)를 Claude AI에 연결하는 MCP 서버 — 자연어로 데이터를 조회하고 대시보드를 관리하세요.
+MCP server that connects [Redash](https://redash.io) to Claude AI — query data, manage dashboards, and run SQL with natural language.
 
-**[English Documentation](README.en.md)**
+**[한국어 문서](README.ko.md)**
 
 ---
 
-## 기능
+## Features
 
-### 툴 목록
+### Tools
 
-| 카테고리 | 툴 | 설명 |
+| Category | Tool | Description |
 |---|---|---|
-| 데이터소스 | `list_data_sources` | 연결된 데이터소스 목록 조회 |
-| 스키마 | `list_tables` | 테이블 목록 조회 (키워드 검색 가능) |
-| 스키마 | `get_table_columns` | 테이블 컬럼명 및 타입 조회 |
-| 쿼리 실행 | `run_query` | SQL 직접 실행 후 결과 반환 |
-| 저장 쿼리 | `list_queries` | 저장된 쿼리 목록 조회 |
-| 저장 쿼리 | `get_query` | 쿼리 상세 정보 (SQL, 시각화 등) 조회 |
-| 저장 쿼리 | `get_query_result` | 저장된 쿼리 실행 결과 조회 |
-| 저장 쿼리 | `create_query` | 새 쿼리 저장 |
-| 저장 쿼리 | `update_query` | 쿼리 수정 |
-| 저장 쿼리 | `fork_query` | 쿼리 복제 |
-| 저장 쿼리 | `archive_query` | 쿼리 삭제 (아카이브) |
-| 대시보드 | `list_dashboards` | 대시보드 목록 조회 |
-| 대시보드 | `get_dashboard` | 대시보드 상세 및 위젯 목록 조회 |
-| 대시보드 | `create_dashboard` | 새 대시보드 생성 |
-| 대시보드 | `add_widget` | 대시보드에 시각화 위젯 추가 |
-| 알림 | `list_alerts` | 알림 목록 조회 |
-| 알림 | `get_alert` | 알림 상세 정보 조회 |
-| 알림 | `create_alert` | 새 알림 생성 |
+| Data Sources | `list_data_sources` | List connected data sources |
+| Schema | `list_tables` | List tables (supports keyword search) |
+| Schema | `get_table_columns` | Get column names and types |
+| Query | `run_query` | Execute SQL and return results |
+| Saved Queries | `list_queries` | List saved queries |
+| Saved Queries | `get_query` | Get query details (SQL, visualizations) |
+| Saved Queries | `get_query_result` | Run a saved query and get results |
+| Saved Queries | `create_query` | Save a new query |
+| Saved Queries | `update_query` | Update a saved query |
+| Saved Queries | `fork_query` | Fork a saved query |
+| Saved Queries | `archive_query` | Archive (delete) a query |
+| Dashboards | `list_dashboards` | List dashboards |
+| Dashboards | `get_dashboard` | Get dashboard details and widgets |
+| Dashboards | `create_dashboard` | Create a new dashboard |
+| Dashboards | `add_widget` | Add a visualization widget to a dashboard |
+| Alerts | `list_alerts` | List alerts |
+| Alerts | `get_alert` | Get alert details |
+| Alerts | `create_alert` | Create a new alert |
 
-### SQL 안전 가드
+### SQL Safety Guard
 
-위험한 쿼리로부터 데이터베이스를 보호합니다:
+Protects your database from dangerous queries:
 
-- **항상 차단**: `DROP`, `TRUNCATE`, `ALTER TABLE`, `GRANT/REVOKE`, `WHERE` 없는 `DELETE/UPDATE`
-- **경고 (warn 모드)** / **차단 (strict 모드)**: `SELECT *`, `WHERE`·`LIMIT` 없는 쿼리, PII 컬럼 접근
-- **자동 LIMIT**: `REDASH_AUTO_LIMIT` 설정 시 LIMIT 없는 쿼리에 자동으로 `LIMIT N` 추가
+- **Blocked always**: `DROP`, `TRUNCATE`, `ALTER TABLE`, `GRANT/REVOKE`, `DELETE/UPDATE` without `WHERE`
+- **Warned (warn mode)** / **Blocked (strict mode)**: `SELECT *`, queries without `WHERE` or `LIMIT`, PII column access
+- **Auto-LIMIT**: Automatically appends `LIMIT N` when `REDASH_AUTO_LIMIT` is set
 
-### 쿼리 캐시
+### Query Cache
 
-중복 API 호출을 줄이기 위해 결과를 메모리에 캐싱합니다:
+Results are cached in-memory to reduce redundant API calls:
 
-- TTL: `REDASH_MCP_CACHE_TTL` 환경변수로 설정 (기본값: 300초)
-- 최대 메모리: `REDASH_MCP_CACHE_MAX_MB` 환경변수로 설정 (기본값: 50MB)
+- TTL: configurable via `REDASH_MCP_CACHE_TTL` (default: 300s)
+- Max memory: configurable via `REDASH_MCP_CACHE_MAX_MB` (default: 50MB)
 
 ---
 
-## 설치
+## Installation
 
-### 자동 설치 (권장)
+### Auto Setup (Recommended)
 
 ```bash
 npx redash-mcp setup
 ```
 
-설치 마법사가 실행되며 Claude Desktop, Claude Code(CLI), 또는 둘 다 선택하여 설정할 수 있습니다.
+The setup wizard will guide you through configuring Claude Desktop, Claude Code (CLI), or both.
 
-### 셸 스크립트로 설치
+### Shell Script Install
 
-Node.js, Claude Desktop, MCP 설정을 한번에 처리합니다:
+Installs Node.js, Claude Desktop, and MCP config all at once:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/seob717/redash-mcp/main/install.sh | bash
 ```
 
-### 수동 설치
+### Manual Setup
 
-#### 1. Redash API 키 발급
+#### 1. Get your Redash API Key
 
-Redash → 우측 상단 프로필 → **Edit Profile** → **API Key** 복사
+Go to Redash → Profile (top right) → **Edit Profile** → Copy **API Key**
 
-#### 2-A. Claude Desktop 설정
+#### 2-A. Claude Desktop
 
-`~/Library/Application Support/Claude/claude_desktop_config.json` 파일을 열고 아래 내용을 추가합니다:
-
-```json
-{
-  "mcpServers": {
-    "redash-mcp": {
-      "command": "npx",
-      "args": ["-y", "redash-mcp"],
-      "env": {
-        "REDASH_URL": "https://your-redash-instance.com",
-        "REDASH_API_KEY": "your_api_key_here"
-      }
-    }
-  }
-}
-```
-
-저장 후 Claude Desktop을 완전히 종료했다가 다시 시작합니다.
-
-#### 2-B. Claude Code (CLI) 설정
-
-`~/.claude/settings.json` 파일을 열고 아래 내용을 추가합니다:
+Open `~/Library/Application Support/Claude/claude_desktop_config.json` and add:
 
 ```json
 {
@@ -112,39 +91,133 @@ Redash → 우측 상단 프로필 → **Edit Profile** → **API Key** 복사
 }
 ```
 
-> **macOS**: `npx`를 못 찾는 경우 `which npx` 명령어로 전체 경로를 확인 후 대체하세요.
+Fully quit and restart Claude Desktop after saving.
+
+#### 2-B. Claude Code (CLI)
+
+Open `~/.claude/settings.json` and add:
+
+```json
+{
+  "mcpServers": {
+    "redash-mcp": {
+      "command": "npx",
+      "args": ["-y", "redash-mcp"],
+      "env": {
+        "REDASH_URL": "https://your-redash-instance.com",
+        "REDASH_API_KEY": "your_api_key_here"
+      }
+    }
+  }
+}
+```
+
+> **macOS**: If `npx` is not found, run `which npx` to get the full path and use that instead.
 
 ---
 
-## 환경 변수
+## Environment Variables
 
-### 필수
+### Required
 
-| 변수 | 설명 |
+| Variable | Description |
 |---|---|
-| `REDASH_URL` | Redash 인스턴스 URL (예: `https://redash.example.com`) |
-| `REDASH_API_KEY` | Redash 사용자 API 키 |
+| `REDASH_URL` | Redash instance URL (e.g. `https://redash.example.com`) |
+| `REDASH_API_KEY` | Redash user API key |
 
-### 선택
+### Optional
 
-| 변수 | 기본값 | 설명 |
+| Variable | Default | Description |
 |---|---|---|
-| `REDASH_SAFETY_MODE` | `warn` | SQL 안전 수준: `off` / `warn` / `strict` |
-| `REDASH_SAFETY_DISABLE_PII` | `false` | PII 감지 비활성화 |
-| `REDASH_SAFETY_DISABLE_COST` | `false` | 비용 경고 비활성화 |
-| `REDASH_AUTO_LIMIT` | `0` | LIMIT 없는 쿼리에 자동으로 `LIMIT N` 추가 (0 = 비활성화) |
-| `REDASH_DEFAULT_MAX_AGE` | `0` | Redash 캐시 TTL (초) |
-| `REDASH_MCP_CACHE_TTL` | `300` | MCP 쿼리 캐시 TTL (초, 0 = 비활성화) |
-| `REDASH_MCP_CACHE_MAX_MB` | `50` | MCP 쿼리 캐시 최대 메모리 (MB) |
+| `REDASH_SAFETY_MODE` | `warn` | SQL safety level: `off` / `warn` / `strict` |
+| `REDASH_SAFETY_DISABLE_PII` | `false` | Disable PII detection |
+| `REDASH_SAFETY_DISABLE_COST` | `false` | Disable cost warnings |
+| `REDASH_AUTO_LIMIT` | `0` | Auto-append `LIMIT N` to queries without one (0 = disabled) |
+| `REDASH_DEFAULT_MAX_AGE` | `0` | Redash cache TTL in seconds |
+| `REDASH_MCP_CACHE_TTL` | `300` | MCP query cache TTL in seconds (0 = disabled) |
+| `REDASH_MCP_CACHE_MAX_MB` | `50` | Max memory for MCP query cache in MB |
 
 ---
 
-## 사용 예시
+## Usage Examples
 
-Claude에게 자연어로 요청하면 됩니다:
+Just ask Claude in natural language:
 
-- "users 테이블 컬럼 보여줘"
-- "최근 7일 주문 수를 SQL로 조회해줘"
-- "저장된 쿼리 목록 보여줘"
-- "매출 대시보드 위젯 목록 알려줘"
-- "일별 가입자 수가 100명 이하로 떨어지면 알림 만들어줘"
+- "Show me the columns in the users table"
+- "Run a query to get order counts for the last 7 days"
+- "List all saved queries"
+- "Show widgets in the revenue dashboard"
+- "Create an alert when daily signups drop below 100"
+
+### Example 1: Query data with natural language
+
+> **Prompt**: "How many new users signed up this month?"
+
+**Tool flow:**
+1. `list_data_sources` → Identify the target data source
+2. `smart_query` → Analyze the question, auto-select the `User` table, provide SQL generation guidance
+3. `run_query` → Execute the generated SQL
+
+**Result:**
+```
+There were 18,197 new signups this month.
+```
+
+### Example 2: Complex business questions
+
+> **Prompt**: "What percentage of last week's new users made a purchase?"
+
+**Tool flow:**
+1. `smart_query` → Analyze the question, auto-select `User` and `Payment` tables, provide JOIN query guidance
+2. `run_query` → Execute the SQL
+
+**Result:**
+```
+Out of 1,204 new users last week, 312 made a purchase (25.9%).
+```
+
+### Example 3: Create a query and dashboard
+
+> **Prompt**: "Create a monthly revenue trend query and add it to a dashboard"
+
+**Tool flow:**
+1. `smart_query` → Analyze revenue-related tables
+2. `create_query` → Save the "Monthly Revenue Trend" query
+3. `create_dashboard` → Create a "Revenue Dashboard"
+4. `get_query` → Get the visualization ID from the saved query
+5. `add_widget` → Add the chart widget to the dashboard
+
+**Result:**
+```
+Created "Revenue Dashboard" with the monthly revenue trend chart.
+View in Redash: https://your-redash.com/dashboard/monthly-revenue
+```
+
+---
+
+## Privacy Policy
+
+### Data Collection and Processing
+
+redash-mcp is a **local MCP server** that communicates directly with your Redash instance. No intermediate servers are involved.
+
+| Item | Description |
+|------|-------------|
+| **Redash API Key** | Stored only as a local environment variable (`REDASH_API_KEY`). Never transmitted externally. |
+| **Query content & results** | Delivered only to the local MCP client (Claude Desktop/Code) via the MCP protocol. |
+| **BIRD SQL settings** | Stored only in local files (`~/.redash-mcp/`). Includes few-shot examples, keyword maps, and feedback. |
+| **LLM Fallback** | When `ANTHROPIC_API_KEY` is set, only table name lists are sent to the Anthropic API. Query data and results are never transmitted. |
+
+### Third-Party Sharing
+
+We do not sell or share user data with third parties. When the LLM Fallback feature is active, only table name lists are sent to the Anthropic API, and only when the user has explicitly configured an `ANTHROPIC_API_KEY`.
+
+### Data Retention
+
+- **Config files**: Stored locally in `~/.redash-mcp/` (user can delete at any time)
+- **Query cache**: In-memory only, cleared on server shutdown
+- **Schema cache**: In-memory only, auto-expires after 10-minute TTL
+
+### Contact
+
+For inquiries and security reports: [GitHub Issues](https://github.com/seob717/redash-mcp/issues)

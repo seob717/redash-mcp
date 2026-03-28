@@ -4,7 +4,14 @@
   "description": "MCP server for Redash",
   "license": "MIT",
   "author": "Jiro Developers",
-  "keywords": ["mcp", "redash", "sql", "bi", "dashboard", "model-context-protocol"],
+  "keywords": [
+    "mcp",
+    "redash",
+    "sql",
+    "bi",
+    "dashboard",
+    "model-context-protocol"
+  ],
   "engines": {
     "node": ">=18"
   },
@@ -27,6 +34,7 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.80.0",
     "@clack/prompts": "^1.1.0",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "zod": "^3.0.0"

@@ -19,6 +19,7 @@ export function registerBirdTools(server: McpServer): void {
       question: z.string().describe("Natural-language question (e.g., 'How many payments were completed last month?')"),
       context: z.string().optional().describe("User's answer to a previous clarification question (for multi-turn)"),
     },
+    { readOnlyHint: true },
     async ({ data_source_id, question, context }) => {
       const result = await handleSmartQuery({ question, data_source_id, context });
 
@@ -80,6 +81,7 @@ export function registerBirdTools(server: McpServer): void {
         .describe("Example to add (required when action=add)"),
       example_id: z.string().optional().describe("Example ID to remove (required when action=remove)"),
     },
+    { destructiveHint: true },
     async ({ data_source_id, action, example, example_id }) => {
       if (action === "list") {
         const examples = await loadExamples(data_source_id);
@@ -141,6 +143,7 @@ export function registerBirdTools(server: McpServer): void {
       correct_sql: z.string().optional().describe("Correct SQL (provide when rating=down for automatic learning)"),
       rating: z.enum(["up", "down"]).describe("Rating: up (correct) or down (incorrect)"),
     },
+    { destructiveHint: true },
     async ({ data_source_id, question, generated_sql, correct_sql, rating }) => {
       const entry = await recordFeedback(data_source_id, {
         question,
@@ -187,6 +190,7 @@ export function registerBirdTools(server: McpServer): void {
         .optional()
         .describe("List of SQL to evaluate (required when action=run)"),
     },
+    { destructiveHint: true },
     async ({ data_source_id, action, test_case, test_case_id, generated_sqls }) => {
       if (action === "list_tests") {
         const store = await loadTestSuite(data_source_id);
@@ -274,6 +278,7 @@ export function registerBirdTools(server: McpServer): void {
         .optional()
         .describe("Keywords to remove (required when action=remove). e.g., [\"revenue\", \"order\"]"),
     },
+    { destructiveHint: true },
     async ({ data_source_id, action, mappings, keywords }) => {
       if (action === "list") {
         const effective = await getEffectiveMap(data_source_id);
@@ -344,6 +349,7 @@ export function registerBirdTools(server: McpServer): void {
     "get_bird_config",
     "View BIRD SQL configuration and status.",
     {},
+    { readOnlyHint: true },
     async () => {
       const config = await loadConfig();
       const configDir = getConfigDir();

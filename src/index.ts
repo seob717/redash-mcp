@@ -27,6 +27,7 @@ server.tool(
   "list_data_sources",
   "List connected data sources (id, name, type). Call this first to get data_source_id.",
   {},
+  { readOnlyHint: true },
   async () => {
     const data = await redashFetch("/data_sources");
     const sources = data.map((ds: any) => ({
@@ -47,13 +48,18 @@ server.tool(
     data_source_id: z.number().describe("Data source ID from list_data_sources"),
     keyword: z.string().optional().describe("Filter keyword for table names (e.g., 'user', 'order')"),
   },
+  { readOnlyHint: true },
   async ({ data_source_id, keyword }) => {
     const schema = await fetchSchema(data_source_id);
     let tables = schema.map((t: any) => t.name);
     if (keyword) {
       tables = tables.filter((name: string) => name.toLowerCase().includes(keyword.toLowerCase()));
     }
-    const summary = `${tables.length} tables${keyword ? ` (matching '${keyword}')` : ""}\n\n${tables.join("\n")}`;
+    const total = tables.length;
+    const MAX_TABLES = 200;
+    const truncated = tables.length > MAX_TABLES;
+    if (truncated) tables = tables.slice(0, MAX_TABLES);
+    const summary = `${total} tables${keyword ? ` (matching '${keyword}')` : ""}${truncated ? ` (showing first ${MAX_TABLES}, use keyword to filter)` : ""}\n\n${tables.join("\n")}`;
     return {
       content: [{ type: "text", text: summary }],
     };
@@ -67,6 +73,7 @@ server.tool(
     data_source_id: z.number().describe("Data source ID from list_data_sources"),
     table_name: z.string().describe("Table name(s), comma-separated (e.g., 'users' or 'users,orders')"),
   },
+  { readOnlyHint: true },
   async ({ data_source_id, table_name }) => {
     const schema = await fetchSchema(data_source_id);
     const tableNames = table_name.split(",").map((n) => n.trim()).filter(Boolean);
@@ -104,6 +111,7 @@ server.tool(
     format: z.enum(["table", "json"]).optional().default("table").describe("Output format: table (markdown) or json"),
     timeout_secs: z.number().optional().default(30).describe("Query execution timeout in seconds"),
   },
+  { readOnlyHint: true },
   async ({ data_source_id, query, max_age, max_rows, format, timeout_secs }) => {
     const guard = analyzeQuery(query);
     if (guard.blocked) {
@@ -185,12 +193,14 @@ server.tool(
   {
     search: z.string().optional().describe("Search keyword"),
     page: z.number().optional().default(1),
-    page_size: z.number().optional().default(20),
+    page_size: z.number().optional().default(20).describe("Page size (max 100)"),
   },
+  { readOnlyHint: true },
   async ({ search, page, page_size }) => {
+    const effectivePageSize = Math.min(page_size, 100);
     const params = new URLSearchParams({
       page: String(page),
-      page_size: String(page_size),
+      page_size: String(effectivePageSize),
       ...(search ? { q: search } : {}),
     });
     const data = await redashFetch(`/queries?${params}`);
@@ -215,6 +225,7 @@ server.tool(
     max_rows: z.number().optional().default(100).describe("Max rows to return (default 100)"),
     format: z.enum(["table", "json"]).optional().default("table").describe("Output format: table (markdown) or json"),
   },
+  { readOnlyHint: true },
   async ({ query_id, max_rows, format }) => {
     const res = await redashFetch(`/queries/${query_id}/results`, {
       method: "POST",
@@ -260,6 +271,7 @@ server.tool(
   {
     query_id: z.number().describe("Query ID (from list_queries)"),
   },
+  { readOnlyHint: true },
   async ({ query_id }) => {
     const data = await redashFetch(`/queries/${query_id}`);
     const result = {
@@ -292,6 +304,7 @@ server.tool(
     description: z.string().optional().describe("Query description"),
     tags: z.array(z.string()).optional().describe("Tags"),
   },
+  { destructiveHint: true },
   async ({ name, query, data_source_id, description, tags }) => {
     const body: Record<string, unknown> = { name, query, data_source_id };
     if (description !== undefined) body.description = description;
@@ -321,6 +334,7 @@ server.tool(
     description: z.string().optional().describe("New description"),
     tags: z.array(z.string()).optional().describe("New tags"),
   },
+  { destructiveHint: true },
   async ({ query_id, name, query, description, tags }) => {
     const body: Record<string, unknown> = {};
     if (name !== undefined) body.name = name;
@@ -348,6 +362,7 @@ server.tool(
   {
     query_id: z.number().describe("Query ID to fork"),
   },
+  { destructiveHint: true },
   async ({ query_id }) => {
     const data = await redashFetch(`/queries/${query_id}/fork`, {
       method: "POST",
@@ -370,6 +385,7 @@ server.tool(
   {
     query_id: z.number().describe("Query ID to archive"),
   },
+  { destructiveHint: true },
   async ({ query_id }) => {
     await redashFetch(`/queries/${query_id}`, { method: "DELETE" });
     return {
@@ -384,12 +400,14 @@ server.tool(
   {
     search: z.string().optional().describe("Search keyword"),
     page: z.number().optional().default(1),
-    page_size: z.number().optional().default(20),
+    page_size: z.number().optional().default(20).describe("Page size (max 100)"),
   },
+  { readOnlyHint: true },
   async ({ search, page, page_size }) => {
+    const effectivePageSize = Math.min(page_size, 100);
     const params = new URLSearchParams({
       page: String(page),
-      page_size: String(page_size),
+      page_size: String(effectivePageSize),
       ...(search ? { q: search } : {}),
     });
     const data = await redashFetch(`/dashboards?${params}`);
@@ -412,6 +430,7 @@ server.tool(
   {
     dashboard_id_or_slug: z.string().describe("Dashboard ID or slug (from list_dashboards)"),
   },
+  { readOnlyHint: true },
   async ({ dashboard_id_or_slug }) => {
     const data = await redashFetch(`/dashboards/${dashboard_id_or_slug}`);
     const result = {
@@ -442,6 +461,7 @@ server.tool(
   {
     name: z.string().describe("Dashboard name"),
   },
+  { destructiveHint: true },
   async ({ name }) => {
     const data = await redashFetch("/dashboards", {
       method: "POST",
@@ -467,6 +487,7 @@ server.tool(
     text: z.string().optional().default("").describe("Widget text"),
     width: z.number().optional().default(1).describe("Widget width (1 or 2)"),
   },
+  { destructiveHint: true },
   async ({ dashboard_id, visualization_id, text, width }) => {
     const data = await redashFetch("/widgets", {
       method: "POST",
@@ -493,6 +514,7 @@ server.tool(
   "list_alerts",
   "List alerts in Redash.",
   {},
+  { readOnlyHint: true },
   async () => {
     const data = await redashFetch("/alerts");
     const alerts = Array.isArray(data) ? data : [];
@@ -516,6 +538,7 @@ server.tool(
   {
     alert_id: z.number().describe("Alert ID (from list_alerts)"),
   },
+  { readOnlyHint: true },
   async ({ alert_id }) => {
     const alert = await redashFetch(`/alerts/${alert_id}`);
     const result = {
@@ -550,6 +573,7 @@ server.tool(
     value: z.number().describe("Threshold value"),
     rearm: z.number().optional().default(0).describe("Rearm interval in seconds (0 = fire once)"),
   },
+  { destructiveHint: true },
   async ({ name, query_id, column, op, value, rearm }) => {
     const data = await redashFetch("/alerts", {
       method: "POST",
