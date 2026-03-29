@@ -1,0 +1,11 @@
+{
+  "name": "redash-mcp",
+  "description": "Connect Claude Code to Redash -- query data, manage dashboards, and run SQL with natural language. 24 tools including BIRD SQL methodology for intelligent query generation.",
+  "version": "3.0.0",
+  "author": {
+    "name": "seob717"
+  },
+  "homepage": "https://github.com/seob717/redash-mcp",
+  "repository": "https://github.com/seob717/redash-mcp",
+  "license": "MIT"
+}
