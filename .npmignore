@@ -13,3 +13,5 @@ tsconfig.json
 .gitattributes
 .mcpbignore
 .mcp.json
+.mcpregistry_*
+server.json

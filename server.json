@@ -1,0 +1,36 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.seob717/redash-mcp",
+  "description": "Connect Redash to Claude -- query data, manage dashboards, and run SQL with natural language.",
+  "repository": {
+    "url": "https://github.com/seob717/redash-mcp",
+    "source": "github"
+  },
+  "version": "3.0.2",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "redash-mcp",
+      "version": "3.0.2",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "REDASH_URL",
+          "description": "Your Redash instance URL (e.g. https://redash.example.com)",
+          "isRequired": true,
+          "format": "string",
+          "isSecret": false
+        },
+        {
+          "name": "REDASH_API_KEY",
+          "description": "Your Redash user API key (found in Settings > Account)",
+          "isRequired": true,
+          "format": "string",
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}

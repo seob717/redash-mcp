@@ -8,3 +8,4 @@ dist/
 .idea/
 .mcp.json
 *.mcpb
+.mcpregistry_*

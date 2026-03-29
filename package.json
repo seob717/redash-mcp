@@ -1,6 +1,7 @@
 {
   "name": "redash-mcp",
-  "version": "3.0.0",
+  "mcpName": "io.github.seob717/redash-mcp",
+  "version": "3.0.2",
   "description": "MCP server for Redash",
   "license": "MIT",
   "author": "seob717",
