@@ -88,7 +88,9 @@ server.tool(
         results.push(`Table '${name}' not found. Use list_tables to verify the table name.`);
         continue;
       }
-      const cols = (table.columns ?? []).map((c: any) => `${c.name} (${c.type ?? "unknown"})`).join("\n");
+      const cols = (table.columns ?? []).map((c: any) =>
+        typeof c === "string" ? c : `${c.name} (${c.type ?? "unknown"})`
+      ).join("\n");
       results.push(`[${table.name}]\n${cols}`);
     }
 
