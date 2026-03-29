@@ -2,12 +2,45 @@
   "manifest_version": "0.3",
   "name": "redash-mcp",
   "version": "3.0.0",
-  "description": "MCP server for Redash — query, visualize, and manage your Redash instance with natural language",
-  "author": "seob717",
+  "description": "MCP server for Redash -- query data, manage dashboards, and run SQL with natural language. 24 tools including BIRD SQL methodology.",
+  "author": {
+    "name": "seob717",
+    "email": "dev.seob717@gmail.com"
+  },
   "license": "MIT",
-  "repository": "https://github.com/seob717/redash-mcp",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/seob717/redash-mcp"
+  },
   "privacy_policies": [
     "https://github.com/seob717/redash-mcp#privacy-policy"
   ],
-  "support": "https://github.com/seob717/redash-mcp/issues"
+  "support": "https://github.com/seob717/redash-mcp/issues",
+  "server": {
+    "type": "node",
+    "entry_point": "dist/index.js",
+    "mcp_config": {
+      "command": "npx",
+      "args": ["-y", "redash-mcp"],
+      "env": {
+        "REDASH_URL": "${user_config.redash_url}",
+        "REDASH_API_KEY": "${user_config.redash_api_key}"
+      }
+    }
+  },
+  "user_config": {
+    "redash_url": {
+      "type": "string",
+      "title": "Redash URL",
+      "description": "Your Redash instance URL (e.g. https://redash.example.com)",
+      "required": true
+    },
+    "redash_api_key": {
+      "type": "string",
+      "title": "Redash API Key",
+      "description": "Your Redash user API key (found in Settings > Account)",
+      "sensitive": true,
+      "required": true
+    }
+  }
 }
