@@ -15,7 +15,18 @@ export async function handleSmartQuery(params: {
   const { question, data_source_id, context } = params;
   const config = await loadConfig();
 
-  const fullSchema = await fetchSchema(data_source_id);
+  let fullSchema: any[];
+  try {
+    fullSchema = await fetchSchema(data_source_id);
+  } catch (e: any) {
+    return { action: "explain", explanation: `Schema fetch failed: ${e.message}` };
+  }
+  // Defensive: ensure columns are objects
+  for (const table of fullSchema) {
+    table.columns = (table.columns ?? []).map((c: any) =>
+      typeof c === "string" ? { name: c, type: "unknown" } : c
+    );
+  }
 
   const allExamples = config.bird.fewShot.enabled
     ? await loadExamples(data_source_id)

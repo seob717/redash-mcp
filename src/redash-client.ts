@@ -58,7 +58,12 @@ export async function fetchSchema(dataSourceId: number): Promise<any[]> {
     return cached.schema;
   }
   const result = await redashFetch(`/data_sources/${dataSourceId}/schema`);
-  const schema = result.schema ?? [];
+  const schema = (result.schema ?? []).map((table: any) => ({
+    ...table,
+    columns: (table.columns ?? []).map((c: any) =>
+      typeof c === "string" ? { name: c, type: "unknown" } : c
+    ),
+  }));
   schemaCache.set(dataSourceId, { schema, ts: Date.now() });
   return schema;
 }

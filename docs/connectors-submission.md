@@ -21,7 +21,7 @@ Prepared answers for the [Anthropic Connectors Directory form](https://forms.gle
 
 ## Short Description (1-2 sentences)
 
-MCP server that connects Redash to Claude AI -- query data, manage dashboards, and run SQL with natural language. Supports 20+ tools covering data sources, schema exploration, saved queries, dashboards, alerts, and SQL safety guards.
+MCP server that connects Redash to Claude AI -- query data, manage dashboards, and run SQL with natural language. Supports 24 tools covering data sources, schema exploration, saved queries, dashboards, alerts, and BIRD SQL methodology for intelligent query generation.
 
 ---
 
@@ -36,21 +36,21 @@ redash-mcp is a Model Context Protocol (MCP) server that gives Claude full acces
 - **Saved Query Management**: List, view, create, update, fork, and archive saved queries.
 - **Dashboard Management**: List and inspect dashboards, create new ones, and add visualization widgets.
 - **Alerting**: List, view, and create alerts based on query results.
-- **SQL Safety Guard**: Blocks dangerous operations (DROP, TRUNCATE, ALTER TABLE) and warns about risky patterns (SELECT *, missing WHERE/LIMIT, PII column access). Configurable as off/warn/strict.
+- **SQL Safety Guard**: Built-in protection that blocks dangerous operations (DROP, TRUNCATE, ALTER TABLE) and warns about risky patterns. Configurable as off/warn/strict.
 - **Query Cache**: In-memory caching with configurable TTL and memory limits to reduce redundant API calls.
-- **BIRD SQL Methodology**: Intelligent query generation with few-shot examples, keyword mapping, and feedback loops for higher SQL accuracy.
+- **BIRD SQL Methodology**: Intelligent query generation with schema pruning, few-shot examples, keyword mapping, complexity assessment, and feedback loops for higher SQL accuracy. Enable with `REDASH_BIRD_ENABLED=true`.
 
-### Tools (20+)
+### Tools (24)
 
 | Category | Tools |
 |----------|-------|
 | Data Sources | `list_data_sources` |
 | Schema | `list_tables`, `get_table_columns` |
-| Query | `run_query`, `smart_query` |
+| Query Execution | `run_query` |
 | Saved Queries | `list_queries`, `get_query`, `get_query_result`, `create_query`, `update_query`, `fork_query`, `archive_query` |
 | Dashboards | `list_dashboards`, `get_dashboard`, `create_dashboard`, `add_widget` |
 | Alerts | `list_alerts`, `get_alert`, `create_alert` |
-| BIRD SQL | `get_bird_config`, `manage_few_shot_examples`, `manage_keyword_map`, `submit_query_feedback`, `evaluate_queries` |
+| BIRD SQL | `smart_query`, `get_bird_config`, `manage_few_shot_examples`, `manage_keyword_map`, `submit_query_feedback`, `evaluate_queries` |
 
 ---
 
@@ -64,23 +64,23 @@ Alternative categories: Database, SQL, Dashboards
 
 ## Usage Examples
 
-### Example 1: Query data with natural language
+### Example 1: Query data with natural language (BIRD SQL)
 
 **Prompt**: "How many new users signed up this month?"
 
 **Tool flow**:
 1. `list_data_sources` -- Identify the target data source
-2. `smart_query` -- Analyze the question, auto-select the User table, provide SQL generation guidance
+2. `smart_query` -- Analyze the question, auto-select the relevant table, provide schema and SQL generation guidance
 3. `run_query` -- Execute the generated SQL
 
 **Result**: "There were 18,197 new signups this month."
 
-### Example 2: Complex business questions
+### Example 2: Complex business question (BIRD SQL)
 
 **Prompt**: "What percentage of last week's new users made a purchase?"
 
 **Tool flow**:
-1. `smart_query` -- Analyze the question, auto-select User and Payment tables, provide JOIN query guidance
+1. `smart_query` -- Analyze the question, auto-select User and Payment tables, provide JOIN query guidance with few-shot examples
 2. `run_query` -- Execute the SQL
 
 **Result**: "Out of 1,204 new users last week, 312 made a purchase (25.9%)."
@@ -90,11 +90,12 @@ Alternative categories: Database, SQL, Dashboards
 **Prompt**: "Create a monthly revenue trend query and add it to a dashboard"
 
 **Tool flow**:
-1. `smart_query` -- Analyze revenue-related tables
-2. `create_query` -- Save the "Monthly Revenue Trend" query
-3. `create_dashboard` -- Create a "Revenue Dashboard"
-4. `get_query` -- Get the visualization ID from the saved query
-5. `add_widget` -- Add the chart widget to the dashboard
+1. `smart_query` -- Analyze revenue-related tables and generate SQL guidance
+2. `run_query` -- Test the SQL query
+3. `create_query` -- Save the "Monthly Revenue Trend" query
+4. `create_dashboard` -- Create a "Revenue Dashboard"
+5. `get_query` -- Get the visualization ID from the saved query
+6. `add_widget` -- Add the chart widget to the dashboard
 
 **Result**: "Created 'Revenue Dashboard' with the monthly revenue trend chart."
 
@@ -128,7 +129,8 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
       "args": ["-y", "redash-mcp"],
       "env": {
         "REDASH_URL": "https://your-redash-instance.com",
-        "REDASH_API_KEY": "your_api_key_here"
+        "REDASH_API_KEY": "your_api_key_here",
+        "REDASH_BIRD_ENABLED": "true"
       }
     }
   }
@@ -147,7 +149,8 @@ Add to `~/.claude/settings.json`:
       "args": ["-y", "redash-mcp"],
       "env": {
         "REDASH_URL": "https://your-redash-instance.com",
-        "REDASH_API_KEY": "your_api_key_here"
+        "REDASH_API_KEY": "your_api_key_here",
+        "REDASH_BIRD_ENABLED": "true"
       }
     }
   }
@@ -158,12 +161,11 @@ Add to `~/.claude/settings.json`:
 
 ## Test Credentials (for Anthropic review)
 
-> **TODO**: Fill these in before submitting.
-
 | Variable | Value |
 |----------|-------|
 | `REDASH_URL` | `https://server-production-9bfc.up.railway.app` |
 | `REDASH_API_KEY` | `j2K5CnijxL8TZkptOeycKREmpr88ei0UWy92SsFn` |
+| `REDASH_BIRD_ENABLED` | `true` |
 
 ---
 
@@ -178,6 +180,7 @@ Add to `~/.claude/settings.json`:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `REDASH_BIRD_ENABLED` | `true` | BIRD SQL tools enabled by default. Set to `false` to disable. |
 | `REDASH_SAFETY_MODE` | `warn` | SQL safety level: `off` / `warn` / `strict` |
 | `REDASH_AUTO_LIMIT` | `0` | Auto-append LIMIT N to queries (0 = disabled) |
 | `REDASH_MCP_CACHE_TTL` | `300` | Query cache TTL in seconds (0 = disabled) |

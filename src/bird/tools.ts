@@ -8,8 +8,7 @@ import { loadConfig, getConfigDir } from "./config.js";
 import { getEffectiveMap, addMappings, removeMappings, resetMappings, loadKeywordMap, DEFAULT_KEYWORD_MAP } from "./keyword-map.js";
 
 export function registerBirdTools(server: McpServer): void {
-  const enabled = process.env.REDASH_BIRD_ENABLED === "true";
-  if (!enabled) return;
+  if (process.env.REDASH_BIRD_ENABLED === "false") return;
 
   server.tool(
     "smart_query",
