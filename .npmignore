@@ -1,5 +1,6 @@
 src/
 .claude/
+.claude-plugin/
 .omc/
 .idea/
 .github/
@@ -7,5 +8,8 @@ docs/
 install.sh
 install.ps1
 *.tgz
+*.mcpb
 tsconfig.json
 .gitattributes
+.mcpbignore
+.mcp.json
