@@ -6,6 +6,7 @@ import { analyzeQuery } from "./sql-guard.js";
 import { getCached, setCached } from "./query-cache.js";
 import { REDASH_URL, REDASH_API_KEY, redashFetch, pollQueryResult, formatAsMarkdownTable, fetchSchema } from "./redash-client.js";
 import { registerBirdTools } from "./bird/tools.js";
+import { handleToolError } from "./tool-error.js";
 
 if (process.argv[2] === "setup") {
   const { main } = await import("./setup.js");
@@ -29,15 +30,19 @@ server.tool(
   {},
   { readOnlyHint: true },
   async () => {
-    const data = await redashFetch("/data_sources");
-    const sources = data.map((ds: any) => ({
-      id: ds.id,
-      name: ds.name,
-      type: ds.type,
-    }));
-    return {
-      content: [{ type: "text", text: JSON.stringify(sources, null, 2) }],
-    };
+    try {
+      const data = await redashFetch("/data_sources");
+      const sources = data.map((ds: any) => ({
+        id: ds.id,
+        name: ds.name,
+        type: ds.type,
+      }));
+      return {
+        content: [{ type: "text", text: JSON.stringify(sources, null, 2) }],
+      };
+    } catch (error) {
+      return handleToolError("list_data_sources", error);
+    }
   }
 );
 
@@ -50,19 +55,23 @@ server.tool(
   },
   { readOnlyHint: true },
   async ({ data_source_id, keyword }) => {
-    const schema = await fetchSchema(data_source_id);
-    let tables = schema.map((t: any) => t.name);
-    if (keyword) {
-      tables = tables.filter((name: string) => name.toLowerCase().includes(keyword.toLowerCase()));
+    try {
+      const schema = await fetchSchema(data_source_id);
+      let tables = schema.map((t: any) => t.name);
+      if (keyword) {
+        tables = tables.filter((name: string) => name.toLowerCase().includes(keyword.toLowerCase()));
+      }
+      const total = tables.length;
+      const MAX_TABLES = 200;
+      const truncated = tables.length > MAX_TABLES;
+      if (truncated) tables = tables.slice(0, MAX_TABLES);
+      const summary = `${total} tables${keyword ? ` (matching '${keyword}')` : ""}${truncated ? ` (showing first ${MAX_TABLES}, use keyword to filter)` : ""}\n\n${tables.join("\n")}`;
+      return {
+        content: [{ type: "text", text: summary }],
+      };
+    } catch (error) {
+      return handleToolError("list_tables", error);
     }
-    const total = tables.length;
-    const MAX_TABLES = 200;
-    const truncated = tables.length > MAX_TABLES;
-    if (truncated) tables = tables.slice(0, MAX_TABLES);
-    const summary = `${total} tables${keyword ? ` (matching '${keyword}')` : ""}${truncated ? ` (showing first ${MAX_TABLES}, use keyword to filter)` : ""}\n\n${tables.join("\n")}`;
-    return {
-      content: [{ type: "text", text: summary }],
-    };
   }
 );
 
@@ -75,28 +84,32 @@ server.tool(
   },
   { readOnlyHint: true },
   async ({ data_source_id, table_name }) => {
-    const schema = await fetchSchema(data_source_id);
-    const tableNames = table_name.split(",").map((n) => n.trim()).filter(Boolean);
-    const results: string[] = [];
+    try {
+      const schema = await fetchSchema(data_source_id);
+      const tableNames = table_name.split(",").map((n) => n.trim()).filter(Boolean);
+      const results: string[] = [];
 
-    for (const name of tableNames) {
-      let table = schema.find((t: any) => t.name.toLowerCase() === name.toLowerCase());
-      if (!table) {
-        table = schema.find((t: any) => t.name.toLowerCase().includes(name.toLowerCase()));
+      for (const name of tableNames) {
+        let table = schema.find((t: any) => t.name.toLowerCase() === name.toLowerCase());
+        if (!table) {
+          table = schema.find((t: any) => t.name.toLowerCase().includes(name.toLowerCase()));
+        }
+        if (!table) {
+          results.push(`Table '${name}' not found. Use list_tables to verify the table name.`);
+          continue;
+        }
+        const cols = (table.columns ?? []).map((c: any) =>
+          typeof c === "string" ? c : `${c.name} (${c.type ?? "unknown"})`
+        ).join("\n");
+        results.push(`[${table.name}]\n${cols}`);
       }
-      if (!table) {
-        results.push(`Table '${name}' not found. Use list_tables to verify the table name.`);
-        continue;
-      }
-      const cols = (table.columns ?? []).map((c: any) =>
-        typeof c === "string" ? c : `${c.name} (${c.type ?? "unknown"})`
-      ).join("\n");
-      results.push(`[${table.name}]\n${cols}`);
+
+      return {
+        content: [{ type: "text", text: results.join("\n\n") }],
+      };
+    } catch (error) {
+      return handleToolError("get_table_columns", error);
     }
-
-    return {
-      content: [{ type: "text", text: results.join("\n\n") }],
-    };
   }
 );
 
@@ -115,77 +128,81 @@ server.tool(
   },
   { readOnlyHint: true },
   async ({ data_source_id, query, max_age, max_rows, format, timeout_secs }) => {
-    const guard = analyzeQuery(query);
-    if (guard.blocked) {
-      return { content: [{ type: "text", text: guard.message }] };
-    }
+    try {
+      const guard = analyzeQuery(query);
+      if (guard.blocked) {
+        return { content: [{ type: "text", text: guard.message }] };
+      }
 
-    const effectiveQuery = guard.modifiedQuery ?? query;
-    const effectiveMaxAge = max_age ?? DEFAULT_MAX_AGE;
+      const effectiveQuery = guard.modifiedQuery ?? query;
+      const effectiveMaxAge = max_age ?? DEFAULT_MAX_AGE;
 
-    const cached = getCached(data_source_id, effectiveQuery);
-    if (cached) {
-      const { rows, columns, warningPrefix } = cached;
+      const cached = getCached(data_source_id, effectiveQuery);
+      if (cached) {
+        const { rows, columns, warningPrefix } = cached;
+        const displayRows = rows.slice(0, max_rows);
+        const truncated = rows.length > max_rows
+          ? `\n⚠️ Showing ${max_rows} of ${rows.length} rows.`
+          : "";
+        let body: string;
+        if (format === "json") {
+          body = JSON.stringify(displayRows, null, 2);
+        } else {
+          body = formatAsMarkdownTable(columns, displayRows);
+        }
+        const cacheNote = "Returned from MCP cache.\n\n";
+        return {
+          content: [
+            {
+              type: "text",
+              text: `${warningPrefix}${cacheNote}${rows.length} rows | Columns: ${columns.join(", ")}${truncated}\n\n${body}`,
+            },
+          ],
+        };
+      }
+
+      const res = await redashFetch("/query_results", {
+        method: "POST",
+        body: JSON.stringify({ data_source_id, query: effectiveQuery, max_age: effectiveMaxAge }),
+      });
+
+      let result;
+      if (res.job) {
+        result = await pollQueryResult(res.job.id, timeout_secs);
+      } else {
+        result = res;
+      }
+
+      const qr = result.query_result;
+      const rows = qr.data.rows;
+      const columns = qr.data.columns.map((c: any) => c.name);
+
+      const warningPrefix = guard.message ? `${guard.message}\n\n` : "";
+      setCached(data_source_id, effectiveQuery, { rows, columns, warningPrefix });
+
       const displayRows = rows.slice(0, max_rows);
       const truncated = rows.length > max_rows
         ? `\n⚠️ Showing ${max_rows} of ${rows.length} rows.`
         : "";
+
       let body: string;
       if (format === "json") {
         body = JSON.stringify(displayRows, null, 2);
       } else {
         body = formatAsMarkdownTable(columns, displayRows);
       }
-      const cacheNote = "Returned from MCP cache.\n\n";
+
       return {
         content: [
           {
             type: "text",
-            text: `${warningPrefix}${cacheNote}${rows.length} rows | Columns: ${columns.join(", ")}${truncated}\n\n${body}`,
+            text: `${warningPrefix}${rows.length} rows | Columns: ${columns.join(", ")}${truncated}\n\n${body}`,
           },
         ],
       };
+    } catch (error) {
+      return handleToolError("run_query", error);
     }
-
-    const res = await redashFetch("/query_results", {
-      method: "POST",
-      body: JSON.stringify({ data_source_id, query: effectiveQuery, max_age: effectiveMaxAge }),
-    });
-
-    let result;
-    if (res.job) {
-      result = await pollQueryResult(res.job.id, timeout_secs);
-    } else {
-      result = res;
-    }
-
-    const qr = result.query_result;
-    const rows = qr.data.rows;
-    const columns = qr.data.columns.map((c: any) => c.name);
-
-    const warningPrefix = guard.message ? `${guard.message}\n\n` : "";
-    setCached(data_source_id, effectiveQuery, { rows, columns, warningPrefix });
-
-    const displayRows = rows.slice(0, max_rows);
-    const truncated = rows.length > max_rows
-      ? `\n⚠️ Showing ${max_rows} of ${rows.length} rows.`
-      : "";
-
-    let body: string;
-    if (format === "json") {
-      body = JSON.stringify(displayRows, null, 2);
-    } else {
-      body = formatAsMarkdownTable(columns, displayRows);
-    }
-
-    return {
-      content: [
-        {
-          type: "text",
-          text: `${warningPrefix}${rows.length} rows | Columns: ${columns.join(", ")}${truncated}\n\n${body}`,
-        },
-      ],
-    };
   }
 );
 
@@ -199,23 +216,27 @@ server.tool(
   },
   { readOnlyHint: true },
   async ({ search, page, page_size }) => {
-    const effectivePageSize = Math.min(page_size, 100);
-    const params = new URLSearchParams({
-      page: String(page),
-      page_size: String(effectivePageSize),
-      ...(search ? { q: search } : {}),
-    });
-    const data = await redashFetch(`/queries?${params}`);
-    const queries = data.results.map((q: any) => ({
-      id: q.id,
-      name: q.name,
-      description: q.description,
-      data_source_id: q.data_source_id,
-      updated_at: q.updated_at,
-    }));
-    return {
-      content: [{ type: "text", text: JSON.stringify(queries, null, 2) }],
-    };
+    try {
+      const effectivePageSize = Math.min(page_size, 100);
+      const params = new URLSearchParams({
+        page: String(page),
+        page_size: String(effectivePageSize),
+        ...(search ? { q: search } : {}),
+      });
+      const data = await redashFetch(`/queries?${params}`);
+      const queries = data.results.map((q: any) => ({
+        id: q.id,
+        name: q.name,
+        description: q.description,
+        data_source_id: q.data_source_id,
+        updated_at: q.updated_at,
+      }));
+      return {
+        content: [{ type: "text", text: JSON.stringify(queries, null, 2) }],
+      };
+    } catch (error) {
+      return handleToolError("list_queries", error);
+    }
   }
 );
 
@@ -229,41 +250,45 @@ server.tool(
   },
   { readOnlyHint: true },
   async ({ query_id, max_rows, format }) => {
-    const res = await redashFetch(`/queries/${query_id}/results`, {
-      method: "POST",
-      body: JSON.stringify({}),
-    });
+    try {
+      const res = await redashFetch(`/queries/${query_id}/results`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
 
-    let result;
-    if (res.job) {
-      result = await pollQueryResult(res.job.id);
-    } else {
-      result = res;
+      let result;
+      if (res.job) {
+        result = await pollQueryResult(res.job.id);
+      } else {
+        result = res;
+      }
+
+      const qr = result.query_result;
+      const rows = qr.data.rows;
+      const columns = qr.data.columns.map((c: any) => c.name);
+      const displayRows = rows.slice(0, max_rows);
+      const truncated = rows.length > max_rows
+        ? `\n⚠️ Showing ${max_rows} of ${rows.length} rows.`
+        : "";
+
+      let body: string;
+      if (format === "json") {
+        body = JSON.stringify(displayRows, null, 2);
+      } else {
+        body = formatAsMarkdownTable(columns, displayRows);
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Query ID: ${query_id}\n${rows.length} rows | Columns: ${columns.join(", ")}${truncated}\n\n${body}`,
+          },
+        ],
+      };
+    } catch (error) {
+      return handleToolError("get_query_result", error);
     }
-
-    const qr = result.query_result;
-    const rows = qr.data.rows;
-    const columns = qr.data.columns.map((c: any) => c.name);
-    const displayRows = rows.slice(0, max_rows);
-    const truncated = rows.length > max_rows
-      ? `\n⚠️ Showing ${max_rows} of ${rows.length} rows.`
-      : "";
-
-    let body: string;
-    if (format === "json") {
-      body = JSON.stringify(displayRows, null, 2);
-    } else {
-      body = formatAsMarkdownTable(columns, displayRows);
-    }
-
-    return {
-      content: [
-        {
-          type: "text",
-          text: `Query ID: ${query_id}\n${rows.length} rows | Columns: ${columns.join(", ")}${truncated}\n\n${body}`,
-        },
-      ],
-    };
   }
 );
 
@@ -275,24 +300,28 @@ server.tool(
   },
   { readOnlyHint: true },
   async ({ query_id }) => {
-    const data = await redashFetch(`/queries/${query_id}`);
-    const result = {
-      id: data.id,
-      name: data.name,
-      description: data.description,
-      query: data.query,
-      data_source_id: data.data_source_id,
-      tags: data.tags,
-      visualizations_count: Array.isArray(data.visualizations) ? data.visualizations.length : 0,
-      visualizations: Array.isArray(data.visualizations)
-        ? data.visualizations.map((v: any) => ({ id: v.id, name: v.name, type: v.type }))
-        : [],
-      updated_at: data.updated_at,
-      user: data.user?.name,
-    };
-    return {
-      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-    };
+    try {
+      const data = await redashFetch(`/queries/${query_id}`);
+      const result = {
+        id: data.id,
+        name: data.name,
+        description: data.description,
+        query: data.query,
+        data_source_id: data.data_source_id,
+        tags: data.tags,
+        visualizations_count: Array.isArray(data.visualizations) ? data.visualizations.length : 0,
+        visualizations: Array.isArray(data.visualizations)
+          ? data.visualizations.map((v: any) => ({ id: v.id, name: v.name, type: v.type }))
+          : [],
+        updated_at: data.updated_at,
+        user: data.user?.name,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    } catch (error) {
+      return handleToolError("get_query", error);
+    }
   }
 );
 
@@ -308,21 +337,25 @@ server.tool(
   },
   { destructiveHint: true },
   async ({ name, query, data_source_id, description, tags }) => {
-    const body: Record<string, unknown> = { name, query, data_source_id };
-    if (description !== undefined) body.description = description;
-    if (tags !== undefined) body.tags = tags;
-    const data = await redashFetch("/queries", {
-      method: "POST",
-      body: JSON.stringify(body),
-    });
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify({ id: data.id, name: data.name, created_at: data.created_at }, null, 2),
-        },
-      ],
-    };
+    try {
+      const body: Record<string, unknown> = { name, query, data_source_id };
+      if (description !== undefined) body.description = description;
+      if (tags !== undefined) body.tags = tags;
+      const data = await redashFetch("/queries", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({ id: data.id, name: data.name, created_at: data.created_at }, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      return handleToolError("create_query", error);
+    }
   }
 );
 
@@ -338,23 +371,27 @@ server.tool(
   },
   { destructiveHint: true },
   async ({ query_id, name, query, description, tags }) => {
-    const body: Record<string, unknown> = {};
-    if (name !== undefined) body.name = name;
-    if (query !== undefined) body.query = query;
-    if (description !== undefined) body.description = description;
-    if (tags !== undefined) body.tags = tags;
-    const data = await redashFetch(`/queries/${query_id}`, {
-      method: "POST",
-      body: JSON.stringify(body),
-    });
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify({ id: data.id, name: data.name, updated_at: data.updated_at }, null, 2),
-        },
-      ],
-    };
+    try {
+      const body: Record<string, unknown> = {};
+      if (name !== undefined) body.name = name;
+      if (query !== undefined) body.query = query;
+      if (description !== undefined) body.description = description;
+      if (tags !== undefined) body.tags = tags;
+      const data = await redashFetch(`/queries/${query_id}`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({ id: data.id, name: data.name, updated_at: data.updated_at }, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      return handleToolError("update_query", error);
+    }
   }
 );
 
@@ -366,18 +403,22 @@ server.tool(
   },
   { destructiveHint: true },
   async ({ query_id }) => {
-    const data = await redashFetch(`/queries/${query_id}/fork`, {
-      method: "POST",
-      body: JSON.stringify({}),
-    });
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify({ id: data.id, name: data.name }, null, 2),
-        },
-      ],
-    };
+    try {
+      const data = await redashFetch(`/queries/${query_id}/fork`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({ id: data.id, name: data.name }, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      return handleToolError("fork_query", error);
+    }
   }
 );
 
@@ -389,10 +430,14 @@ server.tool(
   },
   { destructiveHint: true },
   async ({ query_id }) => {
-    await redashFetch(`/queries/${query_id}`, { method: "DELETE" });
-    return {
-      content: [{ type: "text", text: `Query ${query_id} has been archived.` }],
-    };
+    try {
+      await redashFetch(`/queries/${query_id}`, { method: "DELETE" });
+      return {
+        content: [{ type: "text", text: `Query ${query_id} has been archived.` }],
+      };
+    } catch (error) {
+      return handleToolError("archive_query", error);
+    }
   }
 );
 
@@ -406,23 +451,27 @@ server.tool(
   },
   { readOnlyHint: true },
   async ({ search, page, page_size }) => {
-    const effectivePageSize = Math.min(page_size, 100);
-    const params = new URLSearchParams({
-      page: String(page),
-      page_size: String(effectivePageSize),
-      ...(search ? { q: search } : {}),
-    });
-    const data = await redashFetch(`/dashboards?${params}`);
-    const results = (data.results ?? data).map((d: any) => ({
-      id: d.id,
-      name: d.name,
-      slug: d.slug,
-      created_at: d.created_at,
-      updated_at: d.updated_at,
-    }));
-    return {
-      content: [{ type: "text", text: JSON.stringify(results, null, 2) }],
-    };
+    try {
+      const effectivePageSize = Math.min(page_size, 100);
+      const params = new URLSearchParams({
+        page: String(page),
+        page_size: String(effectivePageSize),
+        ...(search ? { q: search } : {}),
+      });
+      const data = await redashFetch(`/dashboards?${params}`);
+      const results = (data.results ?? data).map((d: any) => ({
+        id: d.id,
+        name: d.name,
+        slug: d.slug,
+        created_at: d.created_at,
+        updated_at: d.updated_at,
+      }));
+      return {
+        content: [{ type: "text", text: JSON.stringify(results, null, 2) }],
+      };
+    } catch (error) {
+      return handleToolError("list_dashboards", error);
+    }
   }
 );
 
@@ -434,26 +483,30 @@ server.tool(
   },
   { readOnlyHint: true },
   async ({ dashboard_id_or_slug }) => {
-    const data = await redashFetch(`/dashboards/${dashboard_id_or_slug}`);
-    const result = {
-      id: data.id,
-      name: data.name,
-      slug: data.slug,
-      widgets: Array.isArray(data.widgets)
-        ? data.widgets.map((w: any) => ({
-            id: w.id,
-            visualization: w.visualization
-              ? { id: w.visualization.id, name: w.visualization.name, type: w.visualization.type }
-              : null,
-            query: w.visualization?.query
-              ? { id: w.visualization.query.id, name: w.visualization.query.name }
-              : null,
-          }))
-        : [],
-    };
-    return {
-      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-    };
+    try {
+      const data = await redashFetch(`/dashboards/${dashboard_id_or_slug}`);
+      const result = {
+        id: data.id,
+        name: data.name,
+        slug: data.slug,
+        widgets: Array.isArray(data.widgets)
+          ? data.widgets.map((w: any) => ({
+              id: w.id,
+              visualization: w.visualization
+                ? { id: w.visualization.id, name: w.visualization.name, type: w.visualization.type }
+                : null,
+              query: w.visualization?.query
+                ? { id: w.visualization.query.id, name: w.visualization.query.name }
+                : null,
+            }))
+          : [],
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    } catch (error) {
+      return handleToolError("get_dashboard", error);
+    }
   }
 );
 
@@ -465,18 +518,22 @@ server.tool(
   },
   { destructiveHint: true },
   async ({ name }) => {
-    const data = await redashFetch("/dashboards", {
-      method: "POST",
-      body: JSON.stringify({ name }),
-    });
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify({ id: data.id, name: data.name, slug: data.slug }, null, 2),
-        },
-      ],
-    };
+    try {
+      const data = await redashFetch("/dashboards", {
+        method: "POST",
+        body: JSON.stringify({ name }),
+      });
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({ id: data.id, name: data.name, slug: data.slug }, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      return handleToolError("create_dashboard", error);
+    }
   }
 );
 
@@ -491,24 +548,28 @@ server.tool(
   },
   { destructiveHint: true },
   async ({ dashboard_id, visualization_id, text, width }) => {
-    const data = await redashFetch("/widgets", {
-      method: "POST",
-      body: JSON.stringify({
-        dashboard_id,
-        visualization_id,
-        text,
-        width,
-        options: {},
-      }),
-    });
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify({ id: data.id, dashboard_id: data.dashboard_id }, null, 2),
-        },
-      ],
-    };
+    try {
+      const data = await redashFetch("/widgets", {
+        method: "POST",
+        body: JSON.stringify({
+          dashboard_id,
+          visualization_id,
+          text,
+          width,
+          options: {},
+        }),
+      });
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({ id: data.id, dashboard_id: data.dashboard_id }, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      return handleToolError("add_widget", error);
+    }
   }
 );
 
@@ -518,19 +579,23 @@ server.tool(
   {},
   { readOnlyHint: true },
   async () => {
-    const data = await redashFetch("/alerts");
-    const alerts = Array.isArray(data) ? data : [];
-    const result = alerts.map((alert: any) => ({
-      id: alert.id,
-      name: alert.name,
-      state: alert.state,
-      last_triggered_at: alert.last_triggered_at,
-      query: alert.query ? { id: alert.query.id, name: alert.query.name } : null,
-      options: alert.options,
-    }));
-    return {
-      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-    };
+    try {
+      const data = await redashFetch("/alerts");
+      const alerts = Array.isArray(data) ? data : [];
+      const result = alerts.map((alert: any) => ({
+        id: alert.id,
+        name: alert.name,
+        state: alert.state,
+        last_triggered_at: alert.last_triggered_at,
+        query: alert.query ? { id: alert.query.id, name: alert.query.name } : null,
+        options: alert.options,
+      }));
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    } catch (error) {
+      return handleToolError("list_alerts", error);
+    }
   }
 );
 
@@ -542,25 +607,29 @@ server.tool(
   },
   { readOnlyHint: true },
   async ({ alert_id }) => {
-    const alert = await redashFetch(`/alerts/${alert_id}`);
-    const result = {
-      id: alert.id,
-      name: alert.name,
-      state: alert.state,
-      last_triggered_at: alert.last_triggered_at,
-      query: alert.query
-        ? {
-            id: alert.query.id,
-            name: alert.query.name,
-            description: alert.query.description,
-            data_source_id: alert.query.data_source_id,
-          }
-        : null,
-      options: alert.options,
-    };
-    return {
-      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-    };
+    try {
+      const alert = await redashFetch(`/alerts/${alert_id}`);
+      const result = {
+        id: alert.id,
+        name: alert.name,
+        state: alert.state,
+        last_triggered_at: alert.last_triggered_at,
+        query: alert.query
+          ? {
+              id: alert.query.id,
+              name: alert.query.name,
+              description: alert.query.description,
+              data_source_id: alert.query.data_source_id,
+            }
+          : null,
+        options: alert.options,
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    } catch (error) {
+      return handleToolError("get_alert", error);
+    }
   }
 );
 
@@ -577,23 +646,27 @@ server.tool(
   },
   { destructiveHint: true },
   async ({ name, query_id, column, op, value, rearm }) => {
-    const data = await redashFetch("/alerts", {
-      method: "POST",
-      body: JSON.stringify({
-        name,
-        query_id,
-        rearm: rearm ?? 0,
-        options: { column, op, value },
-      }),
-    });
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify({ id: data.id, name: data.name }, null, 2),
-        },
-      ],
-    };
+    try {
+      const data = await redashFetch("/alerts", {
+        method: "POST",
+        body: JSON.stringify({
+          name,
+          query_id,
+          rearm: rearm ?? 0,
+          options: { column, op, value },
+        }),
+      });
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({ id: data.id, name: data.name }, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      return handleToolError("create_alert", error);
+    }
   }
 );
 

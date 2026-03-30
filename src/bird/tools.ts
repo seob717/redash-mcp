@@ -6,6 +6,7 @@ import { recordFeedback, loadFeedback } from "./feedback.js";
 import { loadTestSuite, addTestCase, removeTestCase, runEvaluation, formatEvalResults } from "./evaluation.js";
 import { loadConfig, getConfigDir } from "./config.js";
 import { getEffectiveMap, addMappings, removeMappings, resetMappings, loadKeywordMap, DEFAULT_KEYWORD_MAP } from "./keyword-map.js";
+import { handleToolError } from "../tool-error.js";
 
 export function registerBirdTools(server: McpServer): void {
   if (process.env.REDASH_BIRD_ENABLED === "false") return;
@@ -20,45 +21,49 @@ export function registerBirdTools(server: McpServer): void {
     },
     { readOnlyHint: true },
     async ({ data_source_id, question, context }) => {
-      const result = await handleSmartQuery({ question, data_source_id, context });
+      try {
+        const result = await handleSmartQuery({ question, data_source_id, context });
 
-      if (result.action === "clarify") {
-        const text = [
-          "## Clarification needed\n",
-          "Before generating SQL, I need more information:\n",
-          ...(result.clarificationQuestions?.map((q, i) => `${i + 1}. ${q}`) ?? []),
-          "\nPlease provide answers, then call smart_query again with the `context` parameter containing your answers.",
-        ].join("\n");
-        return { content: [{ type: "text", text }] };
+        if (result.action === "clarify") {
+          const text = [
+            "## Clarification needed\n",
+            "Before generating SQL, I need more information:\n",
+            ...(result.clarificationQuestions?.map((q, i) => `${i + 1}. ${q}`) ?? []),
+            "\nPlease provide answers, then call smart_query again with the `context` parameter containing your answers.",
+          ].join("\n");
+          return { content: [{ type: "text", text }] };
+        }
+
+        if (result.action === "explain") {
+          return {
+            content: [{ type: "text", text: result.explanation ?? "Cannot generate SQL for this question." }],
+          };
+        }
+
+        const parts: string[] = [];
+
+        if (result.schema) {
+          parts.push(result.schema);
+        }
+
+        if (result.fewShotExamples) {
+          parts.push(result.fewShotExamples);
+        }
+
+        if (result.complexity) {
+          parts.push(`## Complexity: ${result.complexity.level}\n`);
+        }
+
+        if (result.guidance) {
+          parts.push(`## Guidance\n${result.guidance}`);
+        }
+
+        parts.push("\n---\nUse the schema and examples above to generate SQL, then execute with `run_query`.");
+
+        return { content: [{ type: "text", text: parts.join("\n") }] };
+      } catch (error) {
+        return handleToolError("smart_query", error);
       }
-
-      if (result.action === "explain") {
-        return {
-          content: [{ type: "text", text: result.explanation ?? "Cannot generate SQL for this question." }],
-        };
-      }
-
-      const parts: string[] = [];
-
-      if (result.schema) {
-        parts.push(result.schema);
-      }
-
-      if (result.fewShotExamples) {
-        parts.push(result.fewShotExamples);
-      }
-
-      if (result.complexity) {
-        parts.push(`## Complexity: ${result.complexity.level}\n`);
-      }
-
-      if (result.guidance) {
-        parts.push(`## Guidance\n${result.guidance}`);
-      }
-
-      parts.push("\n---\nUse the schema and examples above to generate SQL, then execute with `run_query`.");
-
-      return { content: [{ type: "text", text: parts.join("\n") }] };
     },
   );
 
@@ -82,53 +87,57 @@ export function registerBirdTools(server: McpServer): void {
     },
     { destructiveHint: true },
     async ({ data_source_id, action, example, example_id }) => {
-      if (action === "list") {
-        const examples = await loadExamples(data_source_id);
-        if (examples.length === 0) {
-          return { content: [{ type: "text", text: "No few-shot examples registered." }] };
+      try {
+        if (action === "list") {
+          const examples = await loadExamples(data_source_id);
+          if (examples.length === 0) {
+            return { content: [{ type: "text", text: "No few-shot examples registered." }] };
+          }
+          const text = examples
+            .map(
+              (e) =>
+                `**[${e.id}]** ${e.question}\n\`\`\`sql\n${e.sql}\n\`\`\`\nTables: ${e.tables.join(", ")} | Tags: ${e.tags.join(", ")} | Source: ${e.source}`,
+            )
+            .join("\n\n---\n\n");
+          return { content: [{ type: "text", text: `Total ${examples.length} example(s):\n\n${text}` }] };
         }
-        const text = examples
-          .map(
-            (e) =>
-              `**[${e.id}]** ${e.question}\n\`\`\`sql\n${e.sql}\n\`\`\`\nTables: ${e.tables.join(", ")} | Tags: ${e.tags.join(", ")} | Source: ${e.source}`,
-          )
-          .join("\n\n---\n\n");
-        return { content: [{ type: "text", text: `Total ${examples.length} example(s):\n\n${text}` }] };
-      }
 
-      if (action === "add") {
-        if (!example) {
-          return { content: [{ type: "text", text: "The example parameter is required." }] };
+        if (action === "add") {
+          if (!example) {
+            return { content: [{ type: "text", text: "The example parameter is required." }] };
+          }
+          const added = await addExample(data_source_id, {
+            question: example.question,
+            sql: example.sql,
+            tables: example.tables,
+            tags: example.tags ?? [],
+            notes: example.notes ?? "",
+            source: "manual",
+          });
+          return {
+            content: [{ type: "text", text: `Few-shot example added. (ID: ${added.id})` }],
+          };
         }
-        const added = await addExample(data_source_id, {
-          question: example.question,
-          sql: example.sql,
-          tables: example.tables,
-          tags: example.tags ?? [],
-          notes: example.notes ?? "",
-          source: "manual",
-        });
-        return {
-          content: [{ type: "text", text: `Few-shot example added. (ID: ${added.id})` }],
-        };
-      }
 
-      if (action === "remove") {
-        if (!example_id) {
-          return { content: [{ type: "text", text: "The example_id parameter is required." }] };
+        if (action === "remove") {
+          if (!example_id) {
+            return { content: [{ type: "text", text: "The example_id parameter is required." }] };
+          }
+          const removed = await removeExample(data_source_id, example_id);
+          return {
+            content: [
+              {
+                type: "text",
+                text: removed ? `Example ${example_id} has been removed.` : `Example ${example_id} not found.`,
+              },
+            ],
+          };
         }
-        const removed = await removeExample(data_source_id, example_id);
-        return {
-          content: [
-            {
-              type: "text",
-              text: removed ? `Example ${example_id} has been removed.` : `Example ${example_id} not found.`,
-            },
-          ],
-        };
-      }
 
-      return { content: [{ type: "text", text: "Invalid action" }] };
+        return { content: [{ type: "text", text: "Invalid action" }] };
+      } catch (error) {
+        return handleToolError("manage_few_shot_examples", error);
+      }
     },
   );
 
@@ -144,22 +153,26 @@ export function registerBirdTools(server: McpServer): void {
     },
     { destructiveHint: true },
     async ({ data_source_id, question, generated_sql, correct_sql, rating }) => {
-      const entry = await recordFeedback(data_source_id, {
-        question,
-        generatedSql: generated_sql,
-        correctSql: correct_sql,
-        rating,
-      });
+      try {
+        const entry = await recordFeedback(data_source_id, {
+          question,
+          generatedSql: generated_sql,
+          correctSql: correct_sql,
+          rating,
+        });
 
-      const parts = [`Feedback recorded. (ID: ${entry.id})`];
-      if (entry.errorType) {
-        parts.push(`Error type: ${entry.errorType}`);
-      }
-      if (entry.promotedToFewShot) {
-        parts.push("Repeated errors of the same type — auto-promoted to few-shot example.");
-      }
+        const parts = [`Feedback recorded. (ID: ${entry.id})`];
+        if (entry.errorType) {
+          parts.push(`Error type: ${entry.errorType}`);
+        }
+        if (entry.promotedToFewShot) {
+          parts.push("Repeated errors of the same type — auto-promoted to few-shot example.");
+        }
 
-      return { content: [{ type: "text", text: parts.join("\n") }] };
+        return { content: [{ type: "text", text: parts.join("\n") }] };
+      } catch (error) {
+        return handleToolError("submit_query_feedback", error);
+      }
     },
   );
 
@@ -191,74 +204,78 @@ export function registerBirdTools(server: McpServer): void {
     },
     { destructiveHint: true },
     async ({ data_source_id, action, test_case, test_case_id, generated_sqls }) => {
-      if (action === "list_tests") {
-        const store = await loadTestSuite(data_source_id);
-        if (store.testCases.length === 0) {
-          return { content: [{ type: "text", text: "No test cases registered." }] };
+      try {
+        if (action === "list_tests") {
+          const store = await loadTestSuite(data_source_id);
+          if (store.testCases.length === 0) {
+            return { content: [{ type: "text", text: "No test cases registered." }] };
+          }
+          const text = store.testCases
+            .map(
+              (tc) =>
+                `**[${tc.id}]** ${tc.question}\nDifficulty: ${tc.difficulty} | Tags: ${tc.tags.join(", ")}\n\`\`\`sql\n${tc.groundTruthSql}\n\`\`\``,
+            )
+            .join("\n\n---\n\n");
+          return { content: [{ type: "text", text: `Total ${store.testCases.length} test case(s):\n\n${text}` }] };
         }
-        const text = store.testCases
-          .map(
-            (tc) =>
-              `**[${tc.id}]** ${tc.question}\nDifficulty: ${tc.difficulty} | Tags: ${tc.tags.join(", ")}\n\`\`\`sql\n${tc.groundTruthSql}\n\`\`\``,
-          )
-          .join("\n\n---\n\n");
-        return { content: [{ type: "text", text: `Total ${store.testCases.length} test case(s):\n\n${text}` }] };
-      }
 
-      if (action === "add_test") {
-        if (!test_case) {
-          return { content: [{ type: "text", text: "The test_case parameter is required." }] };
+        if (action === "add_test") {
+          if (!test_case) {
+            return { content: [{ type: "text", text: "The test_case parameter is required." }] };
+          }
+          const added = await addTestCase(data_source_id, {
+            question: test_case.question,
+            groundTruthSql: test_case.ground_truth_sql,
+            difficulty: test_case.difficulty,
+            tags: test_case.tags ?? [],
+          });
+          return {
+            content: [{ type: "text", text: `Test case added. (ID: ${added.id})` }],
+          };
         }
-        const added = await addTestCase(data_source_id, {
-          question: test_case.question,
-          groundTruthSql: test_case.ground_truth_sql,
-          difficulty: test_case.difficulty,
-          tags: test_case.tags ?? [],
-        });
-        return {
-          content: [{ type: "text", text: `Test case added. (ID: ${added.id})` }],
-        };
-      }
 
-      if (action === "remove_test") {
-        if (!test_case_id) {
-          return { content: [{ type: "text", text: "The test_case_id parameter is required." }] };
+        if (action === "remove_test") {
+          if (!test_case_id) {
+            return { content: [{ type: "text", text: "The test_case_id parameter is required." }] };
+          }
+          const removed = await removeTestCase(data_source_id, test_case_id);
+          return {
+            content: [
+              {
+                type: "text",
+                text: removed ? `Test case ${test_case_id} has been removed.` : `Test case ${test_case_id} not found.`,
+              },
+            ],
+          };
         }
-        const removed = await removeTestCase(data_source_id, test_case_id);
-        return {
-          content: [
-            {
-              type: "text",
-              text: removed ? `Test case ${test_case_id} has been removed.` : `Test case ${test_case_id} not found.`,
-            },
-          ],
-        };
-      }
 
-      if (action === "run") {
-        if (!generated_sqls || generated_sqls.length === 0) {
-          return { content: [{ type: "text", text: "The generated_sqls parameter is required." }] };
+        if (action === "run") {
+          if (!generated_sqls || generated_sqls.length === 0) {
+            return { content: [{ type: "text", text: "The generated_sqls parameter is required." }] };
+          }
+          const run = await runEvaluation(
+            data_source_id,
+            generated_sqls.map((gs) => ({
+              testCaseId: gs.test_case_id,
+              generatedSql: gs.generated_sql,
+            })),
+          );
+          return { content: [{ type: "text", text: formatEvalResults(run) }] };
         }
-        const run = await runEvaluation(
-          data_source_id,
-          generated_sqls.map((gs) => ({
-            testCaseId: gs.test_case_id,
-            generatedSql: gs.generated_sql,
-          })),
-        );
-        return { content: [{ type: "text", text: formatEvalResults(run) }] };
-      }
 
-      if (action === "results") {
-        const store = await loadTestSuite(data_source_id);
-        if (store.runs.length === 0) {
-          return { content: [{ type: "text", text: "No evaluation runs found." }] };
+        if (action === "results") {
+          const store = await loadTestSuite(data_source_id);
+          if (store.runs.length === 0) {
+            return { content: [{ type: "text", text: "No evaluation runs found." }] };
+          }
+          const lastRun = store.runs[store.runs.length - 1];
+          return { content: [{ type: "text", text: formatEvalResults(lastRun) }] };
         }
-        const lastRun = store.runs[store.runs.length - 1];
-        return { content: [{ type: "text", text: formatEvalResults(lastRun) }] };
-      }
 
-      return { content: [{ type: "text", text: "Invalid action" }] };
+        return { content: [{ type: "text", text: "Invalid action" }] };
+      } catch (error) {
+        return handleToolError("evaluate_queries", error);
+      }
     },
   );
 
@@ -279,68 +296,72 @@ export function registerBirdTools(server: McpServer): void {
     },
     { destructiveHint: true },
     async ({ data_source_id, action, mappings, keywords }) => {
-      if (action === "list") {
-        const effective = await getEffectiveMap(data_source_id);
-        const custom = await loadKeywordMap(data_source_id);
-        const defaultCount = Object.keys(DEFAULT_KEYWORD_MAP).length;
-        const customCount = Object.keys(custom).length;
+      try {
+        if (action === "list") {
+          const effective = await getEffectiveMap(data_source_id);
+          const custom = await loadKeywordMap(data_source_id);
+          const defaultCount = Object.keys(DEFAULT_KEYWORD_MAP).length;
+          const customCount = Object.keys(custom).length;
 
-        const lines = [
-          `## Keyword Map (Data Source ${data_source_id})\n`,
-          `Default: ${defaultCount} | Custom: ${customCount} | Total: ${Object.keys(effective).length}\n`,
-        ];
+          const lines = [
+            `## Keyword Map (Data Source ${data_source_id})\n`,
+            `Default: ${defaultCount} | Custom: ${customCount} | Total: ${Object.keys(effective).length}\n`,
+          ];
 
-        if (customCount > 0) {
-          lines.push("### Custom mappings:");
-          for (const [ko, en] of Object.entries(custom)) {
-            lines.push(`- **${ko}** → ${en.join(", ")}`);
+          if (customCount > 0) {
+            lines.push("### Custom mappings:");
+            for (const [ko, en] of Object.entries(custom)) {
+              lines.push(`- **${ko}** → ${en.join(", ")}`);
+            }
+            lines.push("");
           }
-          lines.push("");
+
+          lines.push("### All effective mappings:");
+          for (const [ko, en] of Object.entries(effective)) {
+            const isCustom = ko in custom;
+            lines.push(`- ${isCustom ? "**" : ""}${ko}${isCustom ? "** (custom)" : ""} → ${en.join(", ")}`);
+          }
+
+          return { content: [{ type: "text", text: lines.join("\n") }] };
         }
 
-        lines.push("### All effective mappings:");
-        for (const [ko, en] of Object.entries(effective)) {
-          const isCustom = ko in custom;
-          lines.push(`- ${isCustom ? "**" : ""}${ko}${isCustom ? "** (custom)" : ""} → ${en.join(", ")}`);
+        if (action === "add") {
+          if (!mappings || Object.keys(mappings).length === 0) {
+            return { content: [{ type: "text", text: "The mappings parameter is required. e.g., {\"revenue\": [\"payment\"]}" }] };
+          }
+          const updated = await addMappings(data_source_id, mappings);
+          const added = Object.keys(mappings);
+          return {
+            content: [
+              {
+                type: "text",
+                text: `${added.length} keyword mapping(s) added/updated: ${added.join(", ")}`,
+              },
+            ],
+          };
         }
 
-        return { content: [{ type: "text", text: lines.join("\n") }] };
-      }
-
-      if (action === "add") {
-        if (!mappings || Object.keys(mappings).length === 0) {
-          return { content: [{ type: "text", text: "The mappings parameter is required. e.g., {\"revenue\": [\"payment\"]}" }] };
+        if (action === "remove") {
+          if (!keywords || keywords.length === 0) {
+            return { content: [{ type: "text", text: "The keywords parameter is required." }] };
+          }
+          await removeMappings(data_source_id, keywords);
+          return {
+            content: [{ type: "text", text: `${keywords.length} custom keyword(s) removed: ${keywords.join(", ")}` }],
+          };
         }
-        const updated = await addMappings(data_source_id, mappings);
-        const added = Object.keys(mappings);
-        return {
-          content: [
-            {
-              type: "text",
-              text: `${added.length} keyword mapping(s) added/updated: ${added.join(", ")}`,
-            },
-          ],
-        };
-      }
 
-      if (action === "remove") {
-        if (!keywords || keywords.length === 0) {
-          return { content: [{ type: "text", text: "The keywords parameter is required." }] };
+        if (action === "reset") {
+          await resetMappings(data_source_id);
+          return {
+            content: [{ type: "text", text: "Custom mappings have been reset. Only default mappings will be used." }],
+          };
         }
-        await removeMappings(data_source_id, keywords);
-        return {
-          content: [{ type: "text", text: `${keywords.length} custom keyword(s) removed: ${keywords.join(", ")}` }],
-        };
-      }
 
-      if (action === "reset") {
-        await resetMappings(data_source_id);
-        return {
-          content: [{ type: "text", text: "Custom mappings have been reset. Only default mappings will be used." }],
-        };
+        return { content: [{ type: "text", text: "Invalid action" }] };
+      } catch (error) {
+        return handleToolError("manage_keyword_map", error);
       }
-
-      return { content: [{ type: "text", text: "Invalid action" }] };
     },
   );
 
@@ -350,22 +371,26 @@ export function registerBirdTools(server: McpServer): void {
     {},
     { readOnlyHint: true },
     async () => {
-      const config = await loadConfig();
-      const configDir = getConfigDir();
+      try {
+        const config = await loadConfig();
+        const configDir = getConfigDir();
 
-      const lines = [
-        "## BIRD SQL Configuration\n",
-        `Config directory: \`${configDir}\`\n`,
-        "### Settings:",
-        `- Schema Pruning: ${config.bird.schemaPruning.enabled ? "ON" : "OFF"} (Top-K: ${config.bird.schemaPruning.topK})`,
-        `- Few-shot Examples: ${config.bird.fewShot.enabled ? "ON" : "OFF"} (Max per query: ${config.bird.fewShot.maxExamplesPerQuery})`,
-        `- Feedback Loop: ${config.bird.feedback.enabled ? "ON" : "OFF"} (Auto-promote threshold: ${config.bird.feedback.autoPromoteThreshold})`,
-        `- Complexity Assessment: ${config.bird.complexity.enabled ? "ON" : "OFF"}`,
-        "",
-        `Edit \`${configDir}/config.json\` to customize settings.`,
-      ];
+        const lines = [
+          "## BIRD SQL Configuration\n",
+          `Config directory: \`${configDir}\`\n`,
+          "### Settings:",
+          `- Schema Pruning: ${config.bird.schemaPruning.enabled ? "ON" : "OFF"} (Top-K: ${config.bird.schemaPruning.topK})`,
+          `- Few-shot Examples: ${config.bird.fewShot.enabled ? "ON" : "OFF"} (Max per query: ${config.bird.fewShot.maxExamplesPerQuery})`,
+          `- Feedback Loop: ${config.bird.feedback.enabled ? "ON" : "OFF"} (Auto-promote threshold: ${config.bird.feedback.autoPromoteThreshold})`,
+          `- Complexity Assessment: ${config.bird.complexity.enabled ? "ON" : "OFF"}`,
+          "",
+          `Edit \`${configDir}/config.json\` to customize settings.`,
+        ];
 
-      return { content: [{ type: "text", text: lines.join("\n") }] };
+        return { content: [{ type: "text", text: lines.join("\n") }] };
+      } catch (error) {
+        return handleToolError("get_bird_config", error);
+      }
     },
   );
 }

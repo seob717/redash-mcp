@@ -1,4 +1,28 @@
-const REDASH_URL = process.env.REDASH_URL?.replace(/\/$/, "");
+function validateRedashUrl(raw: string | undefined): string | undefined {
+  if (raw === undefined) return undefined;
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) return undefined;
+  if (/[\n\r]/.test(raw)) {
+    throw new Error("REDASH_URL must not contain newlines");
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    throw new Error(`REDASH_URL is not a valid URL: ${raw}`);
+  }
+  if (parsed.username || parsed.password) {
+    throw new Error("REDASH_URL must not contain credentials");
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error(
+      `REDASH_URL must use http or https scheme, got: ${parsed.protocol}`
+    );
+  }
+  return trimmed.replace(/\/$/, "");
+}
+
+const REDASH_URL = validateRedashUrl(process.env.REDASH_URL);
 const REDASH_API_KEY = process.env.REDASH_API_KEY;
 
 export { REDASH_URL, REDASH_API_KEY };
