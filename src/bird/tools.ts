@@ -286,7 +286,7 @@ export function registerBirdTools(server: McpServer): void {
       data_source_id: z.number().describe("Data source ID"),
       action: z.enum(["list", "add", "remove", "reset"]).describe("Action to perform"),
       mappings: z
-        .record(z.array(z.string()))
+        .record(z.string(), z.array(z.string()))
         .optional()
         .describe("Mappings to add (required when action=add). e.g., {\"revenue\": [\"payment\", \"billing\"]}"),
       keywords: z

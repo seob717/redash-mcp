@@ -40,7 +40,7 @@
     "@anthropic-ai/sdk": "^0.95.2",
     "@clack/prompts": "^1.4.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "zod": "^3.0.0"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
