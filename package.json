@@ -35,9 +35,9 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.80.0",
-    "@clack/prompts": "^1.1.0",
-    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@anthropic-ai/sdk": "^0.95.2",
+    "@clack/prompts": "^1.4.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "zod": "^3.0.0"
   },
   "devDependencies": {
