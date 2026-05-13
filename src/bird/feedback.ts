@@ -38,7 +38,6 @@ export async function recordFeedback(
   };
 
   entries.push(newEntry);
-  await saveFeedback(dataSourceId, entries);
 
   if (newEntry.rating === "down" && newEntry.correctSql && newEntry.errorType) {
     const config = await loadConfig();
@@ -50,11 +49,11 @@ export async function recordFeedback(
       if (sameErrorCount >= config.bird.feedback.autoPromoteThreshold) {
         await promoteToFewShot(dataSourceId, newEntry);
         newEntry.promotedToFewShot = true;
-        await saveFeedback(dataSourceId, entries);
       }
     }
   }
 
+  await saveFeedback(dataSourceId, entries);
   return newEntry;
 }
 

@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -19,9 +22,20 @@ if (!REDASH_URL || !REDASH_API_KEY) {
   process.exit(1);
 }
 
+function readPackageVersion(): string {
+  try {
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    const pkgPath = path.join(here, "..", "package.json");
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
+    return typeof pkg.version === "string" ? pkg.version : "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+}
+
 const server = new McpServer({
   name: "redash-mcp",
-  version: "3.0.0",
+  version: readPackageVersion(),
 });
 
 server.tool(
@@ -217,9 +231,10 @@ server.tool(
   { readOnlyHint: true },
   async ({ search, page, page_size }) => {
     try {
-      const effectivePageSize = Math.min(page_size, 100);
+      const effectivePageSize = Math.max(1, Math.min(page_size, 100));
+      const effectivePage = Math.max(1, page);
       const params = new URLSearchParams({
-        page: String(page),
+        page: String(effectivePage),
         page_size: String(effectivePageSize),
         ...(search ? { q: search } : {}),
       });
@@ -247,9 +262,10 @@ server.tool(
     query_id: z.number().describe("Saved query ID (from list_queries)"),
     max_rows: z.number().optional().default(100).describe("Max rows to return (default 100)"),
     format: z.enum(["table", "json"]).optional().default("table").describe("Output format: table (markdown) or json"),
+    timeout_secs: z.number().optional().default(30).describe("Query execution timeout in seconds"),
   },
   { readOnlyHint: true },
-  async ({ query_id, max_rows, format }) => {
+  async ({ query_id, max_rows, format, timeout_secs }) => {
     try {
       const res = await redashFetch(`/queries/${query_id}/results`, {
         method: "POST",
@@ -258,7 +274,7 @@ server.tool(
 
       let result;
       if (res.job) {
-        result = await pollQueryResult(res.job.id);
+        result = await pollQueryResult(res.job.id, timeout_secs);
       } else {
         result = res;
       }
@@ -452,9 +468,10 @@ server.tool(
   { readOnlyHint: true },
   async ({ search, page, page_size }) => {
     try {
-      const effectivePageSize = Math.min(page_size, 100);
+      const effectivePageSize = Math.max(1, Math.min(page_size, 100));
+      const effectivePage = Math.max(1, page);
       const params = new URLSearchParams({
-        page: String(page),
+        page: String(effectivePage),
         page_size: String(effectivePageSize),
         ...(search ? { q: search } : {}),
       });
@@ -544,7 +561,7 @@ server.tool(
     dashboard_id: z.number().describe("Dashboard ID"),
     visualization_id: z.number().describe("Visualization ID (from get_query's visualizations)"),
     text: z.string().optional().default("").describe("Widget text"),
-    width: z.number().optional().default(1).describe("Widget width (1 or 2)"),
+    width: z.union([z.literal(1), z.literal(2)]).optional().default(1).describe("Widget width (1 = half, 2 = full)"),
   },
   { destructiveHint: true },
   async ({ dashboard_id, visualization_id, text, width }) => {

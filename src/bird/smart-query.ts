@@ -141,8 +141,13 @@ function detectVagueness(
     clarifications.push("Which specific time period? (e.g., last 7 days, last month, 2025-01-01 ~ 2025-03-31)");
   }
 
-  const wordCount = question.trim().split(/\s+/).length;
-  if (wordCount < 4) {
+  const trimmed = question.trim();
+  const wordCount = trimmed.split(/\s+/).length;
+  const hasCJK = /[ㄱ-힝]/.test(trimmed);
+  const tooShort = hasCJK
+    ? trimmed.replace(/\s+/g, "").length < 6
+    : wordCount < 4;
+  if (tooShort) {
     clarifications.push("Could you provide more details about what data you need?");
   }
 

@@ -101,7 +101,7 @@ function tokenize(text: string): string[] {
     "it", "its", "this", "that", "these", "those", "what", "which",
     "who", "whom", "how", "where", "when", "why",
     "show", "give", "tell", "get", "find", "list", "display",
-    "의", "���", "이", "은", "는", "을", "를", "에", "에서", "와", "과",
+    "의", "가", "이", "은", "는", "을", "를", "에", "에서", "와", "과",
     "도", "로", "으로", "만", "까지", "부터", "에게", "한테", "께",
     "좀", "해줘", "알려줘", "보여줘", "해", "하는", "된", "인",
   ]);

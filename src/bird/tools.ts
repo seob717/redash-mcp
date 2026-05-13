@@ -85,7 +85,7 @@ export function registerBirdTools(server: McpServer): void {
         .describe("Example to add (required when action=add)"),
       example_id: z.string().optional().describe("Example ID to remove (required when action=remove)"),
     },
-    { destructiveHint: true },
+    {},
     async ({ data_source_id, action, example, example_id }) => {
       try {
         if (action === "list") {
@@ -151,7 +151,7 @@ export function registerBirdTools(server: McpServer): void {
       correct_sql: z.string().optional().describe("Correct SQL (provide when rating=down for automatic learning)"),
       rating: z.enum(["up", "down"]).describe("Rating: up (correct) or down (incorrect)"),
     },
-    { destructiveHint: true },
+    {},
     async ({ data_source_id, question, generated_sql, correct_sql, rating }) => {
       try {
         const entry = await recordFeedback(data_source_id, {
@@ -202,7 +202,7 @@ export function registerBirdTools(server: McpServer): void {
         .optional()
         .describe("List of SQL to evaluate (required when action=run)"),
     },
-    { destructiveHint: true },
+    {},
     async ({ data_source_id, action, test_case, test_case_id, generated_sqls }) => {
       try {
         if (action === "list_tests") {
@@ -294,7 +294,7 @@ export function registerBirdTools(server: McpServer): void {
         .optional()
         .describe("Keywords to remove (required when action=remove). e.g., [\"revenue\", \"order\"]"),
     },
-    { destructiveHint: true },
+    {},
     async ({ data_source_id, action, mappings, keywords }) => {
       try {
         if (action === "list") {
