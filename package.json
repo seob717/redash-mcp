@@ -18,7 +18,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/seob717/redash-mcp.git"
+    "url": "git+https://github.com/seob717/redash-mcp.git"
   },
   "homepage": "https://github.com/seob717/redash-mcp#readme",
   "bugs": {
