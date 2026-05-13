@@ -136,6 +136,10 @@ Open `~/.claude/settings.json` and add:
 | `REDASH_DEFAULT_MAX_AGE` | `0` | Redash cache TTL in seconds |
 | `REDASH_MCP_CACHE_TTL` | `300` | MCP query cache TTL in seconds (0 = disabled) |
 | `REDASH_MCP_CACHE_MAX_MB` | `50` | Max memory for MCP query cache in MB |
+| `REDASH_MCP_CONFIG_DIR` | `~/.redash-mcp` | Directory for BIRD few-shot, feedback, eval, keyword-map data |
+| `REDASH_BIRD_ENABLED` | `true` | Set to `false` to disable BIRD smart query tools |
+| `REDASH_HTTP_TIMEOUT_SECS` | `30` | Per-request HTTP timeout against the Redash API |
+| `ANTHROPIC_API_KEY` | — | If set, BIRD smart_query falls back to Claude Haiku for table selection when keyword scoring fails |
 
 ---
 

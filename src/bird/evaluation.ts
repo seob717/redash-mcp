@@ -1,6 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { ensureConfigDir, getDataSourcePath } from "./config.js";
-import { redashFetch } from "../redash-client.js";
+import { redashFetch, pollQueryResult } from "../redash-client.js";
 import type { EvalTestCase, EvalRun, EvalRunResult } from "./types.js";
 
 interface EvalStore {
@@ -173,18 +173,7 @@ async function executeQuery(
 
   let result;
   if (res.job) {
-    for (let i = 0; i < 30; i++) {
-      const job = await redashFetch(`/jobs/${res.job.id}`);
-      if (job.job.status === 3) {
-        result = await redashFetch(`/query_results/${job.job.query_result_id}`);
-        break;
-      }
-      if (job.job.status === 4) {
-        throw new Error(`Query failed: ${job.job.error}`);
-      }
-      await new Promise((r) => setTimeout(r, 1000));
-    }
-    if (!result) throw new Error("Query timed out");
+    result = await pollQueryResult(res.job.id, 30);
   } else {
     result = res;
   }

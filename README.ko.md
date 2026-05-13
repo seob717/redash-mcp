@@ -136,6 +136,10 @@ Redash → 우측 상단 프로필 → **Edit Profile** → **API Key** 복사
 | `REDASH_DEFAULT_MAX_AGE` | `0` | Redash 캐시 TTL (초) |
 | `REDASH_MCP_CACHE_TTL` | `300` | MCP 쿼리 캐시 TTL (초, 0 = 비활성화) |
 | `REDASH_MCP_CACHE_MAX_MB` | `50` | MCP 쿼리 캐시 최대 메모리 (MB) |
+| `REDASH_MCP_CONFIG_DIR` | `~/.redash-mcp` | BIRD few-shot/피드백/평가/키워드맵 저장 디렉터리 |
+| `REDASH_BIRD_ENABLED` | `true` | `false`로 설정하면 BIRD smart query 도구 비활성화 |
+| `REDASH_HTTP_TIMEOUT_SECS` | `30` | Redash API 요청 단위 HTTP 타임아웃 |
+| `ANTHROPIC_API_KEY` | — | 설정 시 BIRD smart_query가 키워드 매칭 실패 시 Claude Haiku로 테이블 선택 폴백 |
 
 ---
 

@@ -38,6 +38,17 @@ function roughSize(obj: any): number {
   return JSON.stringify(obj).length * 2;
 }
 
+function purgeExpired(ttl: number): void {
+  if (ttl === 0) return;
+  const now = Date.now();
+  for (const [key, entry] of cache) {
+    if (now - entry.ts > ttl) {
+      totalSizeBytes -= entry.size;
+      cache.delete(key);
+    }
+  }
+}
+
 export function getCached(dataSourceId: number, sql: string): any | null {
   const ttl = getCacheTtlMs();
   if (ttl === 0) return null;
@@ -52,6 +63,9 @@ export function getCached(dataSourceId: number, sql: string): any | null {
     return null;
   }
 
+  // Touch entry to maintain LRU order via insertion-order Map semantics.
+  cache.delete(key);
+  cache.set(key, entry);
   return entry.result;
 }
 
@@ -63,6 +77,8 @@ export function setCached(dataSourceId: number, sql: string, result: any): void 
   const size = roughSize(result);
 
   if (size > maxSize * 0.2) return;
+
+  purgeExpired(ttl);
 
   while (totalSizeBytes + size > maxSize && cache.size > 0) {
     const oldestKey = cache.keys().next().value;
