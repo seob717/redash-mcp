@@ -1,7 +1,7 @@
 {
   "manifest_version": "0.3",
   "name": "redash-mcp",
-  "version": "3.1.1",
+  "version": "3.1.2",
   "description": "MCP server for Redash -- query data, manage dashboards, and run SQL with natural language. 24 tools including BIRD SQL methodology.",
   "icon": "icon.png",
   "author": {
