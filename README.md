@@ -1,8 +1,14 @@
 # redash-mcp
 
-MCP server that connects [Redash](https://redash.io) to Claude AI — query data, manage dashboards, and run SQL with natural language.
+[![npm version](https://img.shields.io/npm/v/redash-mcp.svg)](https://www.npmjs.com/package/redash-mcp)
+[![Downloads](https://img.shields.io/npm/dm/redash-mcp.svg)](https://www.npmjs.com/package/redash-mcp)
+[![Node](https://img.shields.io/node/v/redash-mcp.svg)](https://nodejs.org)
 
-**[한국어 문서](README.ko.md)**
+English | [한국어](README.ko.md) | [日本語](README.ja.md)
+
+> MCP server that connects [Redash](https://redash.io) to Claude AI — query data, manage dashboards, and run SQL with natural language.
+
+[Features](#features) · [Install](#installation) · [Env](#environment-variables) · [Examples](#usage-examples) · [Privacy](#privacy-policy)
 
 ---
 

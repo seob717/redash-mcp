@@ -1,8 +1,16 @@
 # redash-mcp
 
-[Redash](https://redash.io)를 Claude AI에 연결하는 MCP 서버 — 자연어로 데이터를 조회하고 대시보드를 관리하세요.
+[![npm version](https://img.shields.io/npm/v/redash-mcp.svg)](https://www.npmjs.com/package/redash-mcp)
+[![Downloads](https://img.shields.io/npm/dm/redash-mcp.svg)](https://www.npmjs.com/package/redash-mcp)
+[![Node](https://img.shields.io/node/v/redash-mcp.svg)](https://nodejs.org)
 
-**[English Documentation](README.md)**
+[English](README.md) | 한국어 | [日本語](README.ja.md)
+
+> [Redash](https://redash.io)를 Claude AI에 연결하는 MCP 서버 — 자연어로 데이터를 조회하고 대시보드를 관리하세요.
+
+[기능](#기능) · [설치](#설치) · [환경 변수](#환경-변수) · [사용 예시](#사용-예시) · [Privacy](#privacy-policy)
+
+> 영문 README와 마지막 동기화: 2026-05-14
 
 ---
 
