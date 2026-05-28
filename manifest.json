@@ -25,7 +25,10 @@
       "args": ["-y", "redash-mcp"],
       "env": {
         "REDASH_URL": "${user_config.redash_url}",
-        "REDASH_API_KEY": "${user_config.redash_api_key}"
+        "REDASH_API_KEY": "${user_config.redash_api_key}",
+        "REDASH_SAFETY_MODE": "${user_config.safety_mode}",
+        "REDASH_SAFETY_DISABLE_PII": "${user_config.disable_pii_guard}",
+        "REDASH_SAFETY_DISABLE_COST": "${user_config.disable_cost_guard}"
       }
     }
   },
@@ -42,6 +45,27 @@
       "description": "Your Redash user API key (found in Settings > Account)",
       "sensitive": true,
       "required": true
+    },
+    "safety_mode": {
+      "type": "string",
+      "title": "SQL Safety Mode",
+      "description": "How strictly to enforce SQL safety guards. 'strict' blocks risky queries (DELETE without WHERE, full table scans on large tables, PII access). 'warn' (default) returns warnings but executes the query. 'off' disables all guards -- not recommended.",
+      "default": "warn",
+      "required": false
+    },
+    "disable_pii_guard": {
+      "type": "boolean",
+      "title": "Disable PII guard (NOT RECOMMENDED)",
+      "description": "Only enable if you understand the consequences. When enabled, queries that read columns flagged as PII (email, phone, ssn, etc.) will not be warned about or blocked.",
+      "default": false,
+      "required": false
+    },
+    "disable_cost_guard": {
+      "type": "boolean",
+      "title": "Disable cost guard (NOT RECOMMENDED)",
+      "description": "Only enable if you understand the consequences. When enabled, expensive queries (full scans, large cross joins) will not be warned about or blocked.",
+      "default": false,
+      "required": false
     }
   }
 }
