@@ -29,3 +29,20 @@ jobs:
 
       - name: Run tests
         run: npm test
+
+      - name: Smoke test bundled output in isolated shell
+        run: |
+          set -euo pipefail
+          PACK_DIR="$(mktemp -d)"
+          npm pack --pack-destination "$PACK_DIR"
+          TARBALL=$(ls "$PACK_DIR"/redash-mcp-*.tgz | head -1)
+
+          INSTALL_DIR="$(mktemp -d)"
+          cd "$INSTALL_DIR"
+          tar -xzf "$TARBALL"
+          # Validate the bundled dist/index.js works without any node_modules.
+          test ! -d package/node_modules
+          REQ='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}'
+          RESP=$(printf '%s\n' "$REQ" | REDASH_URL=http://example REDASH_API_KEY=ci-test node package/dist/index.js | head -1)
+          echo "Response: $RESP"
+          echo "$RESP" | grep -q '"protocolVersion"'
