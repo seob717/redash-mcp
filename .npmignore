@@ -1,5 +1,6 @@
 src/
 tests/
+scripts/
 .claude/
 .claude-plugin/
 .omc/

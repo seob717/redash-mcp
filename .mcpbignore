@@ -11,6 +11,7 @@
 *.mcpb
 src/
 tests/
+scripts/
 docs/
 .github/
 install.sh
