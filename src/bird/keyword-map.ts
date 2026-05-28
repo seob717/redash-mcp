@@ -1,11 +1,10 @@
 import { readFile, writeFile } from "node:fs/promises";
-import { ensureConfigDir, getConfigDir } from "./config.js";
-import path from "node:path";
+import { ensureConfigDir, getDataSourcePath } from "./config.js";
 
 const DEFAULT_KEYWORD_MAP: Record<string, string[]> = {};
 
 function getMapPath(dataSourceId: number): string {
-  return path.join(getConfigDir(), "keyword-map", `${dataSourceId}.json`);
+  return getDataSourcePath("keyword-map", dataSourceId);
 }
 
 export async function loadKeywordMap(dataSourceId: number): Promise<Record<string, string[]>> {

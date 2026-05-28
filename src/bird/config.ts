@@ -41,8 +41,21 @@ export async function ensureConfigDir(): Promise<void> {
   }
 }
 
+const ALLOWED_SUBDIRS = new Set(["few-shot", "feedback", "eval", "keyword-map"]);
+
 export function getDataSourcePath(subdir: string, dataSourceId: number): string {
-  return path.join(getConfigDir(), subdir, `${dataSourceId}.json`);
+  if (!ALLOWED_SUBDIRS.has(subdir)) {
+    throw new Error(`Invalid config subdir: ${subdir}`);
+  }
+  if (!Number.isSafeInteger(dataSourceId) || dataSourceId < 0) {
+    throw new Error(`Invalid dataSourceId: ${dataSourceId}`);
+  }
+  const root = path.resolve(getConfigDir());
+  const candidate = path.resolve(root, subdir, `${dataSourceId}.json`);
+  if (candidate !== path.join(root, subdir, `${dataSourceId}.json`)) {
+    throw new Error(`Resolved path escapes config dir: ${candidate}`);
+  }
+  return candidate;
 }
 
 export async function loadConfig(): Promise<BirdConfig> {
