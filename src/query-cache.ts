@@ -9,14 +9,19 @@ interface CacheEntry {
 const cache = new Map<string, CacheEntry>();
 let totalSizeBytes = 0;
 
+const MAX_CACHE_TTL_SECS = 86400;
+const MAX_CACHE_SIZE_MB = 1024;
+
 function getCacheTtlMs(): number {
   const ttl = parseInt(process.env.REDASH_MCP_CACHE_TTL ?? "300", 10);
-  return (isNaN(ttl) ? 300 : ttl) * 1000;
+  if (!Number.isFinite(ttl) || ttl < 0) return 300 * 1000;
+  return Math.min(ttl, MAX_CACHE_TTL_SECS) * 1000;
 }
 
 function getMaxSizeBytes(): number {
   const mb = parseInt(process.env.REDASH_MCP_CACHE_MAX_MB ?? "50", 10);
-  return (isNaN(mb) ? 50 : mb) * 1024 * 1024;
+  if (!Number.isFinite(mb) || mb <= 0) return 50 * 1024 * 1024;
+  return Math.min(mb, MAX_CACHE_SIZE_MB) * 1024 * 1024;
 }
 
 function normalizeSQL(sql: string): string {

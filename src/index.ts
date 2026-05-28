@@ -129,16 +129,20 @@ server.tool(
 
 const DEFAULT_MAX_AGE = parseInt(process.env.REDASH_DEFAULT_MAX_AGE ?? "0", 10) || 0;
 
+const MAX_ROWS_LIMIT = 10000;
+const MAX_TIMEOUT_SECS = 300;
+const MAX_CACHE_AGE_SECS = 86400 * 7;
+
 server.tool(
   "run_query",
   "Execute SQL against a data source and return results. Check schema with list_tables and get_table_columns first.",
   {
-    data_source_id: z.number().describe("Data source ID from list_data_sources"),
+    data_source_id: z.number().int().nonnegative().describe("Data source ID from list_data_sources"),
     query: z.string().describe("SQL query to execute"),
-    max_age: z.number().optional().describe("Redash cache TTL in seconds. Defaults to REDASH_DEFAULT_MAX_AGE env var"),
-    max_rows: z.number().optional().default(100).describe("Max rows to return (default 100)"),
+    max_age: z.number().int().min(0).max(MAX_CACHE_AGE_SECS).optional().describe("Redash cache TTL in seconds (0 to 604800). Defaults to REDASH_DEFAULT_MAX_AGE env var"),
+    max_rows: z.number().int().min(1).max(MAX_ROWS_LIMIT).optional().default(100).describe(`Max rows to return (1 to ${MAX_ROWS_LIMIT}, default 100)`),
     format: z.enum(["table", "json"]).optional().default("table").describe("Output format: table (markdown) or json"),
-    timeout_secs: z.number().optional().default(30).describe("Query execution timeout in seconds"),
+    timeout_secs: z.number().int().min(1).max(MAX_TIMEOUT_SECS).optional().default(30).describe(`Query execution timeout in seconds (1 to ${MAX_TIMEOUT_SECS}, default 30)`),
   },
   { readOnlyHint: true },
   async ({ data_source_id, query, max_age, max_rows, format, timeout_secs }) => {
@@ -259,10 +263,10 @@ server.tool(
   "get_query_result",
   "Execute a saved query by ID and return results.",
   {
-    query_id: z.number().describe("Saved query ID (from list_queries)"),
-    max_rows: z.number().optional().default(100).describe("Max rows to return (default 100)"),
+    query_id: z.number().int().nonnegative().describe("Saved query ID (from list_queries)"),
+    max_rows: z.number().int().min(1).max(MAX_ROWS_LIMIT).optional().default(100).describe(`Max rows to return (1 to ${MAX_ROWS_LIMIT}, default 100)`),
     format: z.enum(["table", "json"]).optional().default("table").describe("Output format: table (markdown) or json"),
-    timeout_secs: z.number().optional().default(30).describe("Query execution timeout in seconds"),
+    timeout_secs: z.number().int().min(1).max(MAX_TIMEOUT_SECS).optional().default(30).describe(`Query execution timeout in seconds (1 to ${MAX_TIMEOUT_SECS}, default 30)`),
   },
   { readOnlyHint: true },
   async ({ query_id, max_rows, format, timeout_secs }) => {

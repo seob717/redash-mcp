@@ -26,8 +26,10 @@ const REDASH_URL = validateRedashUrl(process.env.REDASH_URL);
 const REDASH_API_KEY = process.env.REDASH_API_KEY;
 
 const HTTP_TIMEOUT_MS = (() => {
+  const MAX_TIMEOUT_SECS = 600;
   const raw = parseInt(process.env.REDASH_HTTP_TIMEOUT_SECS ?? "30", 10);
-  return (isNaN(raw) || raw <= 0 ? 30 : raw) * 1000;
+  const clamped = !Number.isFinite(raw) || raw <= 0 ? 30 : Math.min(raw, MAX_TIMEOUT_SECS);
+  return clamped * 1000;
 })();
 
 export { REDASH_URL, REDASH_API_KEY };

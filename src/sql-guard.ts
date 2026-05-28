@@ -14,14 +14,20 @@ interface GuardConfig {
   autoLimit: number;
 }
 
+const MAX_AUTO_LIMIT = 1000000;
+
 function getConfig(): GuardConfig {
   const raw = process.env.REDASH_SAFETY_MODE ?? "warn";
   const mode: SafetyMode = ["off", "warn", "strict"].includes(raw) ? (raw as SafetyMode) : "warn";
+  const parsedLimit = parseInt(process.env.REDASH_AUTO_LIMIT ?? "0", 10);
+  const autoLimit = !Number.isFinite(parsedLimit) || parsedLimit <= 0
+    ? 0
+    : Math.min(parsedLimit, MAX_AUTO_LIMIT);
   return {
     mode,
     disablePii: process.env.REDASH_SAFETY_DISABLE_PII === "true",
     disableCost: process.env.REDASH_SAFETY_DISABLE_COST === "true",
-    autoLimit: parseInt(process.env.REDASH_AUTO_LIMIT ?? "0", 10) || 0,
+    autoLimit,
   };
 }
 
