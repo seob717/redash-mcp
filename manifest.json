@@ -3,6 +3,7 @@
   "name": "redash-mcp",
   "version": "3.1.3",
   "description": "MCP server for Redash -- query data, manage dashboards, and run SQL with natural language. 24 tools including BIRD SQL methodology.",
+  "long_description": "Connects an MCP client to a Redash instance: list data sources, inspect schemas, run SQL, manage saved queries / dashboards / alerts, and use BIRD SQL helpers (smart_query, keyword maps, few-shot examples, feedback, evaluation). Built-in SQL safety guards flag PII access and expensive scans; safety mode can be tuned per install. **Third-party data flow:** if you also set ANTHROPIC_API_KEY in the shell environment, the BIRD smart_query tool may send table-name lists (never query results or row data) to the Anthropic API as a fallback for table selection. Leave ANTHROPIC_API_KEY unset to disable this entirely.",
   "icon": "icon.png",
   "author": {
     "name": "seob717",

@@ -13,7 +13,7 @@ export function registerBirdTools(server: McpServer): void {
 
   server.tool(
     "smart_query",
-    "BIRD SQL-based intelligent query tool. Analyzes natural-language questions to (1) extract relevant schema, (2) match similar few-shot examples, (3) assess complexity, (4) request clarification for ambiguous questions. Call this tool before run_query. For a new data source, first inspect the schema with list_tables, then register keyword-to-table mappings via manage_keyword_map to significantly improve accuracy.",
+    "BIRD SQL-based intelligent query tool. Analyzes natural-language questions to (1) extract relevant schema, (2) match similar few-shot examples, (3) assess complexity, (4) request clarification for ambiguous questions. Call this tool before run_query. For a new data source, first inspect the schema with list_tables, then register keyword-to-table mappings via manage_keyword_map to significantly improve accuracy. Note: when ANTHROPIC_API_KEY is set, table-name lists (never query results or row data) may be sent to the Anthropic API as a fallback for table selection.",
     {
       data_source_id: z.number().describe("Data source ID (from list_data_sources)"),
       question: z.string().describe("Natural-language question (e.g., 'How many payments were completed last month?')"),
