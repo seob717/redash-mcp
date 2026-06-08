@@ -1,0 +1,46 @@
+# Smithery configuration for redash-mcp (https://smithery.ai/docs/build/project-config/smithery.yaml)
+# redash-mcp is a local stdio MCP server distributed via npm. Smithery runs it
+# with the user-supplied config below.
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    required:
+      - redashUrl
+      - redashApiKey
+    properties:
+      redashUrl:
+        type: string
+        description: "Your Redash instance URL (e.g. https://redash.example.com)"
+      redashApiKey:
+        type: string
+        description: "Your Redash user API key (Redash > Edit Profile > API Key)"
+      safetyMode:
+        type: string
+        enum: ["off", "warn", "strict"]
+        default: "warn"
+        description: "SQL safety level: 'strict' blocks risky queries, 'warn' returns warnings, 'off' disables guards."
+      autoLimit:
+        type: number
+        default: 0
+        description: "Auto-append LIMIT N to queries without one (0 = disabled)."
+      birdEnabled:
+        type: boolean
+        default: true
+        description: "Enable BIRD smart-query tools."
+      anthropicApiKey:
+        type: string
+        description: "Optional. Enables Claude Haiku fallback for table selection in smart_query."
+  commandFunction: |-
+    (config) => ({
+      command: 'npx',
+      args: ['-y', 'redash-mcp'],
+      env: {
+        REDASH_URL: config.redashUrl,
+        REDASH_API_KEY: config.redashApiKey,
+        REDASH_SAFETY_MODE: config.safetyMode ?? 'warn',
+        REDASH_AUTO_LIMIT: String(config.autoLimit ?? 0),
+        REDASH_BIRD_ENABLED: String(config.birdEnabled ?? true),
+        ...(config.anthropicApiKey ? { ANTHROPIC_API_KEY: config.anthropicApiKey } : {})
+      }
+    })
