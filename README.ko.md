@@ -6,11 +6,23 @@
 
 [English](README.md) | 한국어 | [日本語](README.ja.md)
 
-> [Redash](https://redash.io)를 Claude AI에 연결하는 MCP 서버 — 자연어로 데이터를 조회하고 대시보드를 관리하세요.
+> [Redash](https://redash.io)를 Claude AI에 연결하는 MCP 서버 — 자연어로 데이터를 조회하고, SQL을 실행하고, 대시보드를 관리하세요.
 
-[기능](#기능) · [설치](#설치) · [환경 변수](#환경-변수) · [사용 예시](#사용-예시) · [Privacy](#privacy-policy)
+[왜 redash-mcp인가](#왜-redash-mcp인가) · [기능](#기능) · [설치](#설치) · [환경 변수](#환경-변수) · [사용 예시](#사용-예시) · [Privacy](#privacy-policy)
 
-> 영문 README와 마지막 동기화: 2026-05-14
+> 영문 README와 마지막 동기화: 2026-06-09
+
+---
+
+## 왜 redash-mcp인가?
+
+Redash MCP 서버는 여러 개 있습니다. 이 서버는 LLM이 **운영(production) 데이터**를 안전하게 다루도록 만드는 데 초점을 맞췄습니다:
+
+- **🛡️ SQL 안전 가드** — `DROP`/`TRUNCATE`/`ALTER`, `WHERE` 없는 `DELETE`/`UPDATE`를 차단합니다. `strict`/`warn`/`off` 모드, PII 감지, 자동 `LIMIT`까지 지원해 실제 Redash를 Claude에 안심하고 맡길 수 있습니다.
+- **🧠 BIRD 스마트 쿼리** — 질문을 분석해 적절한 테이블을 자동 선택하고 SQL 생성을 가이드합니다([BIRD text-to-SQL](https://bird-bench.github.io/) 방법론 기반). 테이블 선택용 Claude Haiku 폴백도 선택적으로 지원합니다.
+- **⚡ 한 번의 명령으로 설치** — `npx redash-mcp setup`이 Claude Desktop / Claude Code 설정을 대신 잡아줍니다. JSON을 직접 손댈 필요가 없습니다.
+- **🔒 완전 로컬** — Redash 인스턴스와 직접 통신하며, API 키와 쿼리 결과가 기기를 벗어나지 않습니다.
+- **📊 처음부터 끝까지** — 조회·저장·복제, 대시보드, 위젯, 알림까지 6개 카테고리에 걸친 20개 이상의 툴.
 
 ---
 
@@ -23,6 +35,12 @@
 | 데이터소스 | `list_data_sources` | 연결된 데이터소스 목록 조회 |
 | 스키마 | `list_tables` | 테이블 목록 조회 (키워드 검색 가능) |
 | 스키마 | `get_table_columns` | 테이블 컬럼명 및 타입 조회 |
+| 스마트 쿼리 | `smart_query` | 질문 분석 → 테이블 자동 선택 → SQL 생성 가이드 (BIRD) |
+| 스마트 쿼리 | `get_bird_config` | 현재 적용 중인 BIRD 스마트 쿼리 설정 조회 |
+| 스마트 쿼리 | `evaluate_queries` | 생성된 SQL을 기대 결과와 비교 평가 |
+| 스마트 쿼리 | `submit_query_feedback` | 테이블 선택 개선을 위한 피드백 기록 |
+| 스마트 쿼리 | `manage_few_shot_examples` | BIRD few-shot 예제 추가/조회 |
+| 스마트 쿼리 | `manage_keyword_map` | 키워드→테이블 매핑 추가/조회 |
 | 쿼리 실행 | `run_query` | SQL 직접 실행 후 결과 반환 |
 | 저장 쿼리 | `list_queries` | 저장된 쿼리 목록 조회 |
 | 저장 쿼리 | `get_query` | 쿼리 상세 정보 (SQL, 시각화 등) 조회 |

@@ -8,9 +8,21 @@
 
 > [Redash](https://redash.io) を Claude AI に接続する MCP サーバー — 自然言語でデータを照会し、SQL を実行し、ダッシュボードを管理します。
 
-[機能](#機能) · [インストール](#インストール) · [環境変数](#環境変数) · [使用例](#使用例) · [Privacy](#privacy-policy)
+[なぜ redash-mcp か](#なぜ-redash-mcp-か) · [機能](#機能) · [インストール](#インストール) · [環境変数](#環境変数) · [使用例](#使用例) · [Privacy](#privacy-policy)
 
-> 英語版 README との最終同期: 2026-05-14
+> 英語版 README との最終同期: 2026-06-09
+
+---
+
+## なぜ redash-mcp か?
+
+Redash MCP サーバーは複数あります。このサーバーは、LLM に **本番(production)データ** を安全に扱わせることに重点を置いています:
+
+- **🛡️ SQL セーフティガード** — `DROP`/`TRUNCATE`/`ALTER`、`WHERE` なしの `DELETE`/`UPDATE` をブロック。`strict`/`warn`/`off` モード、PII 検出、自動 `LIMIT` まで備え、実際の Redash を安心して Claude に任せられます。
+- **🧠 BIRD スマートクエリ** — 質問を解析して適切なテーブルを自動選択し、SQL 生成をガイドします（[BIRD text-to-SQL](https://bird-bench.github.io/) 手法ベース）。テーブル選択用の Claude Haiku フォールバックもオプションで利用できます。
+- **⚡ ワンコマンドでセットアップ** — `npx redash-mcp setup` が Claude Desktop / Claude Code の設定を代わりに行います。JSON を手で編集する必要はありません。
+- **🔒 完全ローカル** — Redash インスタンスと直接通信し、API キーとクエリ結果が端末から外に出ることはありません。
+- **📊 エンドツーエンド** — 照会・保存・複製、ダッシュボード、ウィジェット、アラートまで、6 カテゴリ・20 以上のツール。
 
 ---
 
@@ -23,6 +35,12 @@
 | データソース | `list_data_sources` | 接続されたデータソースの一覧を取得 |
 | スキーマ | `list_tables` | テーブル一覧を取得（キーワード検索対応） |
 | スキーマ | `get_table_columns` | テーブルのカラム名と型を取得 |
+| スマートクエリ | `smart_query` | 質問を解析 → テーブルを自動選択 → SQL 生成をガイド (BIRD) |
+| スマートクエリ | `get_bird_config` | 現在有効な BIRD スマートクエリ設定を取得 |
+| スマートクエリ | `evaluate_queries` | 生成された SQL を期待結果と比較評価 |
+| スマートクエリ | `submit_query_feedback` | テーブル選択を改善するためのフィードバックを記録 |
+| スマートクエリ | `manage_few_shot_examples` | BIRD few-shot 例の追加/一覧 |
+| スマートクエリ | `manage_keyword_map` | キーワード→テーブルのマッピングの追加/一覧 |
 | クエリ実行 | `run_query` | SQL を実行して結果を返す |
 | 保存クエリ | `list_queries` | 保存済みクエリの一覧を取得 |
 | 保存クエリ | `get_query` | クエリの詳細（SQL、可視化）を取得 |
