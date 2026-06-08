@@ -1,0 +1,17 @@
+node_modules
+dist
+.git
+.github
+.idea
+.claude
+.claude-plugin
+.omc
+tests
+docs
+*.mcpb
+*.tgz
+*.png
+install.sh
+install.ps1
+.mcpregistry_*
+.DS_Store
