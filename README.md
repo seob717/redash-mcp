@@ -8,7 +8,19 @@ English | [한국어](README.ko.md) | [日本語](README.ja.md)
 
 > MCP server that connects [Redash](https://redash.io) to Claude AI — query data, manage dashboards, and run SQL with natural language.
 
-[Features](#features) · [Install](#installation) · [Env](#environment-variables) · [Examples](#usage-examples) · [Privacy](#privacy-policy)
+[Why](#why-redash-mcp) · [Features](#features) · [Install](#installation) · [Env](#environment-variables) · [Examples](#usage-examples) · [Privacy](#privacy-policy)
+
+---
+
+## Why redash-mcp?
+
+There are several Redash MCP servers. This one is built for letting an LLM touch **production** data safely:
+
+- **🛡️ SQL Safety Guard** — blocks `DROP`/`TRUNCATE`/`ALTER` and `DELETE`/`UPDATE` without `WHERE`; `strict`/`warn`/`off` modes, PII detection, and auto-`LIMIT`. Hand Claude your real Redash without flinching.
+- **🧠 BIRD Smart Query** — analyzes the question, auto-selects the right tables, and guides SQL generation (based on the [BIRD text-to-SQL](https://bird-bench.github.io/) methodology). Optional Claude Haiku fallback for table selection.
+- **⚡ One-command setup** — `npx redash-mcp setup` configures Claude Desktop / Claude Code for you. No hand-editing JSON.
+- **🔒 Fully local** — talks directly to your Redash instance. API key and query results never leave your machine.
+- **📊 End-to-end** — query, save, fork, dashboards, widgets, and alerts — 20+ tools across 6 categories.
 
 ---
 
@@ -21,6 +33,12 @@ English | [한국어](README.ko.md) | [日本語](README.ja.md)
 | Data Sources | `list_data_sources` | List connected data sources |
 | Schema | `list_tables` | List tables (supports keyword search) |
 | Schema | `get_table_columns` | Get column names and types |
+| Smart Query | `smart_query` | Analyze a question, auto-select tables, guide SQL generation (BIRD) |
+| Smart Query | `get_bird_config` | Inspect the active BIRD smart-query configuration |
+| Smart Query | `evaluate_queries` | Evaluate generated SQL against expected results |
+| Smart Query | `submit_query_feedback` | Record feedback to improve future table selection |
+| Smart Query | `manage_few_shot_examples` | Add/list BIRD few-shot examples |
+| Smart Query | `manage_keyword_map` | Add/list keyword→table mappings |
 | Query | `run_query` | Execute SQL and return results |
 | Saved Queries | `list_queries` | List saved queries |
 | Saved Queries | `get_query` | Get query details (SQL, visualizations) |

@@ -2,16 +2,27 @@
   "name": "redash-mcp",
   "mcpName": "io.github.seob717/redash-mcp",
   "version": "3.1.4",
-  "description": "MCP server for Redash",
+  "description": "MCP server that connects Redash to Claude AI — query data, manage dashboards, and run SQL with natural language, with built-in SQL safety guards.",
   "license": "MIT",
   "author": "seob717",
   "keywords": [
     "mcp",
+    "mcp-server",
+    "model-context-protocol",
     "redash",
+    "redash-api",
+    "claude",
+    "claude-ai",
+    "anthropic",
     "sql",
+    "text-to-sql",
+    "llm",
+    "ai",
     "bi",
+    "business-intelligence",
     "dashboard",
-    "model-context-protocol"
+    "data-analytics",
+    "natural-language"
   ],
   "engines": {
     "node": ">=20"
