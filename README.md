@@ -252,3 +252,13 @@ We do not sell or share user data with third parties. When the LLM Fallback feat
 ### Contact
 
 For inquiries and security reports: [GitHub Issues](https://github.com/seob717/redash-mcp/issues)
+
+---
+
+## Disclaimer
+
+redash-mcp is an unofficial, community-built integration and is **not affiliated with, endorsed by, or sponsored by Redash**. "Redash" is a trademark of its respective owners and is used here only to describe compatibility. This project communicates with Redash solely through its public REST API.
+
+## License
+
+MIT © seob717

@@ -254,3 +254,13 @@ redash-mcp は **ローカル MCP サーバー** であり、ユーザーの Red
 ### 連絡先
 
 お問い合わせ・セキュリティ報告: [GitHub Issues](https://github.com/seob717/redash-mcp/issues)
+
+---
+
+## 免責事項 (Disclaimer)
+
+redash-mcp はコミュニティが開発した非公式の統合ツールであり、**Redash とは提携・承認・後援のいずれの関係もありません**。「Redash」は各権利者の商標であり、ここでは互換性を説明する目的でのみ使用しています。本プロジェクトは Redash の公開 REST API を通じてのみ通信します。
+
+## ライセンス
+
+MIT © seob717
