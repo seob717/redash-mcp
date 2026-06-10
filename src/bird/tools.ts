@@ -69,7 +69,7 @@ export function registerBirdTools(server: McpServer): void {
 
   server.tool(
     "manage_few_shot_examples",
-    "Manage few-shot examples (list/add/remove). Register domain-specific examples to improve SQL accuracy.",
+    "Manage the few-shot examples that smart_query uses to generate more accurate SQL. Behavior: action 'list' returns all stored examples with their ids; 'add' saves a new example (requires the example object); 'remove' deletes one (requires example_id). Each example pairs a natural-language question with the correct SQL and the tables it uses, teaching the model your schema's domain conventions. Usage: examples are stored locally per data_source_id and are retrieved automatically by smart_query — register a few for recurring question patterns to raise accuracy.",
     {
       data_source_id: z.number().describe("Data source ID"),
       action: z.enum(["list", "add", "remove"]).describe("Action to perform"),
@@ -143,7 +143,7 @@ export function registerBirdTools(server: McpServer): void {
 
   server.tool(
     "submit_query_feedback",
-    "Submit feedback on generated SQL. Incorrect SQL is automatically classified and may be promoted to a few-shot example.",
+    "Record whether the SQL produced for a question was correct, so smart_query improves over time. Behavior: stores an up/down rating; when you rate 'down' and supply the correct SQL, the error is classified and, if the same kind of mistake recurs, automatically promoted into a few-shot example. Returns the feedback id and any error type or promotion. Usage: call after reviewing smart_query/run_query output; feedback is stored locally per data_source_id and feeds the learning loop.",
     {
       data_source_id: z.number().describe("Data source ID"),
       question: z.string().describe("Original natural-language question"),
@@ -178,7 +178,7 @@ export function registerBirdTools(server: McpServer): void {
 
   server.tool(
     "evaluate_queries",
-    "Manage SQL accuracy evaluation. Add/list test cases, run evaluations, and view results.",
+    "Build and run an accuracy test suite for SQL generation on a data source. Behavior: action 'add_test' stores a question paired with ground-truth SQL; 'list_tests' shows them; 'remove_test' deletes one; 'run' scores generated SQL against the test cases; 'results' shows the latest run. Usage: use this to measure whether keyword maps and few-shot examples actually improve smart_query accuracy over time; test cases and runs are stored locally per data_source_id.",
     {
       data_source_id: z.number().describe("Data source ID"),
       action: z.enum(["list_tests", "add_test", "remove_test", "run", "results"]).describe("Action to perform"),

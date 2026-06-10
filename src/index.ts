@@ -91,7 +91,7 @@ server.tool(
 
 server.tool(
   "get_table_columns",
-  "Get column names and types for one or more tables (comma-separated). Verify columns before writing SQL.",
+  "Get the column names and data types for one or more tables in a data source. Accepts a single table or a comma-separated list of tables. Use this to confirm exact column names and types before writing SQL with run_query or smart_query. Returns each table's columns; if a table name is not found, it suggests verifying it with list_tables.",
   {
     data_source_id: z.number().describe("Data source ID from list_data_sources"),
     table_name: z.string().describe("Table name(s), comma-separated (e.g., 'users' or 'users,orders')"),
@@ -135,7 +135,7 @@ const MAX_CACHE_AGE_SECS = 86400 * 7;
 
 server.tool(
   "run_query",
-  "Execute SQL against a data source and return results. Check schema with list_tables and get_table_columns first.",
+  "Execute an ad-hoc SQL query against a data source and return the resulting rows. Every query passes through the SQL safety guard, which blocks destructive statements (DROP/TRUNCATE/ALTER, DELETE/UPDATE without WHERE) and flags PII columns and expensive full scans; results are cached in memory. Behavior: returns up to max_rows rows as a markdown table or JSON, with the column list and a truncation note when there are more rows. Usage: confirm table and column names with list_tables and get_table_columns first; for natural-language questions, plan the SQL with smart_query before calling this. To run an already-saved query instead, use get_query_result.",
   {
     data_source_id: z.number().int().nonnegative().describe("Data source ID from list_data_sources"),
     query: z.string().describe("SQL query to execute"),
@@ -226,11 +226,11 @@ server.tool(
 
 server.tool(
   "list_queries",
-  "List saved queries in Redash.",
+  "List saved (named) queries in Redash, most recently updated first. Behavior: returns a paginated array where each item has id, name, description, data_source_id, and updated_at. Usage: use this to discover query_ids, then call get_query for a query's full SQL and visualizations, or get_query_result to run it. Supports keyword search and pagination; for ad-hoc SQL that isn't saved, use run_query instead.",
   {
-    search: z.string().optional().describe("Search keyword"),
-    page: z.number().optional().default(1),
-    page_size: z.number().optional().default(20).describe("Page size (max 100)"),
+    search: z.string().optional().describe("Optional keyword to filter queries by name/description"),
+    page: z.number().optional().default(1).describe("Page number to fetch, 1-based (default 1)"),
+    page_size: z.number().optional().default(20).describe("Number of queries per page, 1-100 (default 20)"),
   },
   { readOnlyHint: true },
   async ({ search, page, page_size }) => {
@@ -261,9 +261,9 @@ server.tool(
 
 server.tool(
   "get_query_result",
-  "Execute a saved query by ID and return results.",
+  "Run an existing saved query by its ID and return the latest results. Behavior: executes the query as stored in Redash and returns up to max_rows rows as a markdown table or JSON, with the column list and a truncation note. Usage: find the query_id with list_queries or get_query. Unlike run_query, this executes already-saved SQL rather than ad-hoc SQL, so the safety guard does not apply.",
   {
-    query_id: z.number().int().nonnegative().describe("Saved query ID (from list_queries)"),
+    query_id: z.number().int().nonnegative().describe("ID of the saved query to run (from list_queries)"),
     max_rows: z.number().int().min(1).max(MAX_ROWS_LIMIT).optional().default(100).describe(`Max rows to return (1 to ${MAX_ROWS_LIMIT}, default 100)`),
     format: z.enum(["table", "json"]).optional().default("table").describe("Output format: table (markdown) or json"),
     timeout_secs: z.number().int().min(1).max(MAX_TIMEOUT_SECS).optional().default(30).describe(`Query execution timeout in seconds (1 to ${MAX_TIMEOUT_SECS}, default 30)`),
@@ -314,9 +314,9 @@ server.tool(
 
 server.tool(
   "get_query",
-  "Get saved query details (SQL, visualizations, tags).",
+  "Get the full definition of a saved query. Behavior: returns the query's SQL text, data_source_id, tags, owner, update time, and its visualizations (each with id, name, type). Usage: find the query_id with list_queries. The returned visualization ids can be placed on a dashboard with add_widget; to actually run the query use get_query_result.",
   {
-    query_id: z.number().describe("Query ID (from list_queries)"),
+    query_id: z.number().describe("ID of the saved query to inspect (from list_queries)"),
   },
   { readOnlyHint: true },
   async ({ query_id }) => {
@@ -347,13 +347,13 @@ server.tool(
 
 server.tool(
   "create_query",
-  "Save a new query to Redash.",
+  "Save a new named SQL query to Redash so it can be reused, scheduled, visualized, or added to a dashboard. Behavior: creates the query and returns its new id, name, and created_at. Usage: get the data_source_id from list_data_sources and verify the SQL runs with run_query first; to change an existing query use update_query instead. Note: this only saves the query — use get_query_result to execute it.",
   {
-    name: z.string().describe("Query name"),
-    query: z.string().describe("SQL query"),
-    data_source_id: z.number().describe("Data source ID from list_data_sources"),
-    description: z.string().optional().describe("Query description"),
-    tags: z.array(z.string()).optional().describe("Tags"),
+    name: z.string().describe("Display name for the saved query"),
+    query: z.string().describe("The SQL statement to save"),
+    data_source_id: z.number().describe("ID of the data source this query runs against (from list_data_sources)"),
+    description: z.string().optional().describe("Optional human-readable description of what the query does"),
+    tags: z.array(z.string()).optional().describe("Optional tags to categorize the query (e.g., ['finance', 'weekly'])"),
   },
   { destructiveHint: true },
   async ({ name, query, data_source_id, description, tags }) => {
@@ -381,13 +381,13 @@ server.tool(
 
 server.tool(
   "update_query",
-  "Update a saved query's name, SQL, description, or tags.",
+  "Update fields of an existing saved query. Behavior: only the fields you pass are changed (name, SQL, description, or tags); any omitted field is left untouched. Returns the query's id, name, and updated_at. Usage: find the query_id with list_queries or get_query; to create a brand-new query instead, use create_query.",
   {
-    query_id: z.number().describe("Query ID to update"),
-    name: z.string().optional().describe("New name"),
-    query: z.string().optional().describe("New SQL"),
-    description: z.string().optional().describe("New description"),
-    tags: z.array(z.string()).optional().describe("New tags"),
+    query_id: z.number().describe("ID of the saved query to update (from list_queries)"),
+    name: z.string().optional().describe("New display name (omit to keep current)"),
+    query: z.string().optional().describe("New SQL statement (omit to keep current)"),
+    description: z.string().optional().describe("New description (omit to keep current)"),
+    tags: z.array(z.string()).optional().describe("New tag list, replacing the existing tags (omit to keep current)"),
   },
   { destructiveHint: true },
   async ({ query_id, name, query, description, tags }) => {
@@ -417,9 +417,9 @@ server.tool(
 
 server.tool(
   "fork_query",
-  "Fork (duplicate) an existing query.",
+  "Fork (duplicate) an existing saved query into a new, independently editable copy, leaving the original unchanged. Behavior: creates the copy and returns its new id and name. Usage: find the query_id to fork with list_queries; use this when you want to experiment with or adapt a query without modifying the original.",
   {
-    query_id: z.number().describe("Query ID to fork"),
+    query_id: z.number().describe("ID of the saved query to duplicate (from list_queries)"),
   },
   { destructiveHint: true },
   async ({ query_id }) => {
@@ -444,9 +444,9 @@ server.tool(
 
 server.tool(
   "archive_query",
-  "Archive (delete) a query. This action is irreversible.",
+  "Archive a saved query, removing it from active query lists. This is Redash's form of deletion and cannot be undone through the API, so confirm with the user before calling it. Behavior: archives the query and returns a confirmation message. Usage: find the query_id with list_queries.",
   {
-    query_id: z.number().describe("Query ID to archive"),
+    query_id: z.number().describe("ID of the saved query to archive/delete (from list_queries)"),
   },
   { destructiveHint: true },
   async ({ query_id }) => {
@@ -463,11 +463,11 @@ server.tool(
 
 server.tool(
   "list_dashboards",
-  "List dashboards in Redash.",
+  "List dashboards in Redash, most recently updated first. Behavior: returns a paginated array where each item has id, name, slug, and created/updated timestamps. Usage: use this to discover a dashboard's id or slug, then call get_dashboard to inspect its widgets and visualizations, or create_dashboard to make a new one. Supports keyword search and pagination.",
   {
-    search: z.string().optional().describe("Search keyword"),
-    page: z.number().optional().default(1),
-    page_size: z.number().optional().default(20).describe("Page size (max 100)"),
+    search: z.string().optional().describe("Optional keyword to filter dashboards by name"),
+    page: z.number().optional().default(1).describe("Page number to fetch, 1-based (default 1)"),
+    page_size: z.number().optional().default(20).describe("Number of dashboards per page, 1-100 (default 20)"),
   },
   { readOnlyHint: true },
   async ({ search, page, page_size }) => {
@@ -498,9 +498,9 @@ server.tool(
 
 server.tool(
   "get_dashboard",
-  "Get dashboard details including widgets and visualizations.",
+  "Get a dashboard's full layout. Behavior: returns the dashboard's id, name, slug, and every widget, each with its linked visualization (id, name, type) and the query behind it (id, name). Usage: find the dashboard id or slug with list_dashboards; use the returned visualization/query ids to understand or extend the dashboard with add_widget.",
   {
-    dashboard_id_or_slug: z.string().describe("Dashboard ID or slug (from list_dashboards)"),
+    dashboard_id_or_slug: z.string().describe("Dashboard ID or slug to fetch (from list_dashboards)"),
   },
   { readOnlyHint: true },
   async ({ dashboard_id_or_slug }) => {
@@ -533,9 +533,9 @@ server.tool(
 
 server.tool(
   "create_dashboard",
-  "Create a new dashboard.",
+  "Create a new, empty dashboard. Behavior: creates the dashboard and returns its id, name, and slug. Usage: after creating it, populate it with charts using add_widget, passing visualization ids obtained from get_query. To list or inspect existing dashboards instead, use list_dashboards / get_dashboard.",
   {
-    name: z.string().describe("Dashboard name"),
+    name: z.string().describe("Display name for the new dashboard"),
   },
   { destructiveHint: true },
   async ({ name }) => {
@@ -560,12 +560,12 @@ server.tool(
 
 server.tool(
   "add_widget",
-  "Add a visualization widget to a dashboard. Get visualization_id from get_query.",
+  "Add a saved query's visualization onto a dashboard as a widget. Behavior: places the widget and returns its id and dashboard_id. Usage: get the dashboard_id from list_dashboards or create_dashboard, and the visualization_id from get_query (each saved query exposes its visualizations). This is how you build up a dashboard after creating it.",
   {
-    dashboard_id: z.number().describe("Dashboard ID"),
-    visualization_id: z.number().describe("Visualization ID (from get_query's visualizations)"),
-    text: z.string().optional().default("").describe("Widget text"),
-    width: z.union([z.literal(1), z.literal(2)]).optional().default(1).describe("Widget width (1 = half, 2 = full)"),
+    dashboard_id: z.number().describe("ID of the dashboard to add the widget to (from list_dashboards/create_dashboard)"),
+    visualization_id: z.number().describe("ID of the visualization to embed (from get_query's visualizations list)"),
+    text: z.string().optional().default("").describe("Optional text/markdown caption shown on the widget"),
+    width: z.union([z.literal(1), z.literal(2)]).optional().default(1).describe("Widget width: 1 = half row, 2 = full row (default 1)"),
   },
   { destructiveHint: true },
   async ({ dashboard_id, visualization_id, text, width }) => {
@@ -596,7 +596,7 @@ server.tool(
 
 server.tool(
   "list_alerts",
-  "List alerts in Redash.",
+  "List all alerts configured in Redash. Behavior: returns an array where each alert has id, name, current state (ok / triggered / unknown), last_triggered_at, its linked query (id, name), and threshold options. Usage: use this to discover alert_ids, then call get_alert for one alert's full detail, or create_alert to add a new one.",
   {},
   { readOnlyHint: true },
   async () => {
@@ -622,9 +622,9 @@ server.tool(
 
 server.tool(
   "get_alert",
-  "Get alert details (threshold, linked query, state).",
+  "Get the full detail of a single alert. Behavior: returns the alert's id, name, current state, last_triggered_at, threshold options (column, operator, value), and the query it monitors (id, name, description, data_source_id). Usage: find the alert_id with list_alerts.",
   {
-    alert_id: z.number().describe("Alert ID (from list_alerts)"),
+    alert_id: z.number().describe("ID of the alert to inspect (from list_alerts)"),
   },
   { readOnlyHint: true },
   async ({ alert_id }) => {
@@ -656,14 +656,14 @@ server.tool(
 
 server.tool(
   "create_alert",
-  "Create a new alert. Triggers when a query result column crosses a threshold.",
+  "Create an alert that watches a saved query and fires when a chosen result column crosses a threshold (e.g., daily_signups less than 10). Behavior: creates the alert and returns its id and name. Usage: get the query_id from list_queries and confirm the exact column name with get_query / get_query_result first. The alert evaluates the query's latest result on Redash's schedule.",
   {
-    name: z.string().describe("Alert name"),
-    query_id: z.number().describe("Query ID to monitor"),
-    column: z.string().describe("Column name to monitor"),
-    op: z.enum(["greater than", "less than", "equals"]).describe("Comparison operator"),
-    value: z.number().describe("Threshold value"),
-    rearm: z.number().optional().default(0).describe("Rearm interval in seconds (0 = fire once)"),
+    name: z.string().describe("Display name for the alert"),
+    query_id: z.number().describe("ID of the saved query whose results are monitored (from list_queries)"),
+    column: z.string().describe("Name of the result column to compare against the threshold"),
+    op: z.enum(["greater than", "less than", "equals"]).describe("Comparison operator between the column value and the threshold"),
+    value: z.number().describe("Threshold value that triggers the alert when the comparison is true"),
+    rearm: z.number().optional().default(0).describe("Seconds to wait before the alert can fire again; 0 means fire only once until manually reset (default 0)"),
   },
   { destructiveHint: true },
   async ({ name, query_id, column, op, value, rearm }) => {
