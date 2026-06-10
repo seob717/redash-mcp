@@ -4,6 +4,7 @@
 [![Downloads](https://img.shields.io/npm/dm/redash-mcp.svg)](https://www.npmjs.com/package/redash-mcp)
 [![Node](https://img.shields.io/node/v/redash-mcp.svg)](https://nodejs.org)
 [![smithery badge](https://smithery.ai/badge/dev-seob717/redash-mcp)](https://smithery.ai/servers/dev-seob717/redash-mcp)
+[![Glama](https://glama.ai/mcp/servers/seob717/redash-mcp/badges/score.svg)](https://glama.ai/mcp/servers/seob717/redash-mcp)
 
 <a href="https://www.producthunt.com/products/redash-mcp?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-redash-mcp" target="_blank" rel="noopener noreferrer"><img alt="redash-mcp - Let Claude query your Redash safely — with SQL guardrails | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1168656&amp;theme=light&amp;t=1781110407784"></a>
 
