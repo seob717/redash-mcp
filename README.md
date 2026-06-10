@@ -11,6 +11,8 @@ English | [한국어](README.ko.md) | [日本語](README.ja.md)
 
 [Why](#why-redash-mcp) · [Features](#features) · [Install](#installation) · [Env](#environment-variables) · [Examples](#usage-examples) · [Privacy](#privacy-policy)
 
+![redash-mcp demo — Claude explores Redash tables, charts revenue by category, then the SQL safety guard blocks a PII export](docs/demo.gif)
+
 ---
 
 ## Why redash-mcp?

@@ -11,6 +11,8 @@
 
 [なぜ redash-mcp か](#なぜ-redash-mcp-か) · [機能](#機能) · [インストール](#インストール) · [環境変数](#環境変数) · [使用例](#使用例) · [Privacy](#privacy-policy)
 
+![redash-mcp デモ — Claude が Redash のテーブルを調べ、カテゴリ別売上をチャート化し、SQL セーフティガードが PII エクスポートをブロックする](docs/demo.gif)
+
 > 英語版 README との最終同期: 2026-06-09
 
 ---

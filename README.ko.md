@@ -11,6 +11,8 @@
 
 [왜 redash-mcp인가](#왜-redash-mcp인가) · [기능](#기능) · [설치](#설치) · [환경 변수](#환경-변수) · [사용 예시](#사용-예시) · [Privacy](#privacy-policy)
 
+![redash-mcp 데모 — Claude가 Redash 테이블을 살펴보고, 카테고리별 매출을 차트로 만든 뒤, SQL 안전 가드가 PII 내보내기를 차단한다](docs/demo.gif)
+
 > 영문 README와 마지막 동기화: 2026-06-09
 
 ---
