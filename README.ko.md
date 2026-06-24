@@ -6,8 +6,6 @@
 [![smithery badge](https://smithery.ai/badge/dev-seob717/redash-mcp)](https://smithery.ai/servers/dev-seob717/redash-mcp)
 [![Glama](https://glama.ai/mcp/servers/seob717/redash-mcp/badges/score.svg)](https://glama.ai/mcp/servers/seob717/redash-mcp)
 
-<a href="https://www.producthunt.com/products/redash-mcp?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-redash-mcp" target="_blank" rel="noopener noreferrer"><img alt="redash-mcp - Let Claude query your Redash safely — with SQL guardrails | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1168656&amp;theme=light&amp;t=1781110407784"></a>
-
 [English](README.md) | 한국어 | [日本語](README.ja.md)
 
 > [Redash](https://redash.io)를 Claude AI에 연결하는 MCP 서버 — 자연어로 데이터를 조회하고, SQL을 실행하고, 대시보드를 관리하세요.
