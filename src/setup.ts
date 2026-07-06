@@ -32,11 +32,30 @@ function getDesktopConfigPath(): string {
   }
 }
 
-export function buildClaudeMcpAddArgs(mcpEntry: {
+export type McpEntry = {
   command: string;
   args: string[];
   env: Record<string, string>;
-}): string[] {
+};
+
+export function buildGeminiMcpAddArgs(mcpEntry: McpEntry): string[] {
+  return [
+    "mcp",
+    "add",
+    "-s",
+    "user",
+    ...Object.entries(mcpEntry.env).flatMap(([key, value]) => ["-e", `${key}=${value}`]),
+    "redash-mcp",
+    mcpEntry.command,
+    ...mcpEntry.args,
+  ];
+}
+
+export function buildGeminiMcpRemoveArgs(): string[] {
+  return ["mcp", "remove", "-s", "user", "redash-mcp"];
+}
+
+export function buildClaudeMcpAddArgs(mcpEntry: McpEntry): string[] {
   return [
     "mcp",
     "add",
