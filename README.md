@@ -292,4 +292,4 @@ redash-mcp is an unofficial, community-built integration and is **not affiliated
 
 ## License
 
-MIT © seob717
+MIT

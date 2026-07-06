@@ -294,4 +294,4 @@ redash-mcp는 커뮤니티가 만든 비공식 통합 도구이며, **Redash와 
 
 ## 라이선스
 
-MIT © seob717
+MIT
