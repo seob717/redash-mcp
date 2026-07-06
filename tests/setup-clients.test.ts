@@ -1,9 +1,13 @@
-import { describe, it, expect } from "vitest";
+import path from "node:path";
+import os from "node:os";
+import { mkdtempSync, rmSync, readFileSync, writeFileSync } from "node:fs";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
   buildGeminiMcpAddArgs,
   buildGeminiMcpRemoveArgs,
   buildCodexMcpAddArgs,
   buildCodexMcpRemoveArgs,
+  writeJsonConfig,
 } from "../src/setup.js";
 
 const entry = {
@@ -69,5 +73,43 @@ describe("buildCodexMcpAddArgs", () => {
 describe("buildCodexMcpRemoveArgs", () => {
   it("removes the entry", () => {
     expect(buildCodexMcpRemoveArgs()).toEqual(["mcp", "remove", "redash-mcp"]);
+  });
+});
+
+describe("writeJsonConfig", () => {
+  let tmp: string;
+
+  beforeEach(() => {
+    tmp = mkdtempSync(path.join(os.tmpdir(), "setup-json-"));
+  });
+
+  afterEach(() => {
+    rmSync(tmp, { recursive: true, force: true });
+  });
+
+  it("creates the file and parent dir with the entry", () => {
+    const configPath = path.join(tmp, "nested", "mcp.json");
+    writeJsonConfig(configPath, entry);
+    const config = JSON.parse(readFileSync(configPath, "utf8"));
+    expect(config.mcpServers["redash-mcp"]).toEqual(entry);
+  });
+
+  it("preserves existing servers and unrelated keys", () => {
+    const configPath = path.join(tmp, "mcp.json");
+    writeFileSync(
+      configPath,
+      JSON.stringify({ mcpServers: { other: { command: "x" } }, theme: "dark" })
+    );
+    writeJsonConfig(configPath, entry);
+    const config = JSON.parse(readFileSync(configPath, "utf8"));
+    expect(config.mcpServers.other).toEqual({ command: "x" });
+    expect(config.theme).toBe("dark");
+    expect(config.mcpServers["redash-mcp"]).toEqual(entry);
+  });
+
+  it("throws on corrupt JSON instead of clobbering it", () => {
+    const configPath = path.join(tmp, "mcp.json");
+    writeFileSync(configPath, "{not json");
+    expect(() => writeJsonConfig(configPath, entry)).toThrow(/Failed to read/);
   });
 });

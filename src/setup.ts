@@ -145,7 +145,7 @@ export async function main() {
 
   if (targets.includes("desktop")) {
     s.start("Configuring Claude Desktop...");
-    setupDesktop(mcpEntry);
+    writeJsonConfig(getDesktopConfigPath(), mcpEntry);
     s.stop("Claude Desktop configured");
   }
 
@@ -158,8 +158,7 @@ export async function main() {
   p.outro("Setup complete. Restart to start using redash-mcp.");
 }
 
-function setupDesktop(mcpEntry: any) {
-  const configPath = getDesktopConfigPath();
+export function writeJsonConfig(configPath: string, mcpEntry: McpEntry) {
   let config: any = { mcpServers: {} };
 
   if (fs.existsSync(configPath)) {
@@ -167,7 +166,7 @@ function setupDesktop(mcpEntry: any) {
       config = JSON.parse(fs.readFileSync(configPath, "utf8"));
       config.mcpServers ??= {};
     } catch {
-      throw new Error(`Failed to read claude_desktop_config.json: ${configPath}`);
+      throw new Error(`Failed to read config: ${configPath}`);
     }
   } else {
     fs.mkdirSync(path.dirname(configPath), { recursive: true });
@@ -175,6 +174,10 @@ function setupDesktop(mcpEntry: any) {
 
   config.mcpServers["redash-mcp"] = mcpEntry;
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf8");
+}
+
+function getCursorConfigPath(): string {
+  return path.join(os.homedir(), ".cursor", "mcp.json");
 }
 
 export function buildClaudeMcpRemoveArgs(): string[] {
