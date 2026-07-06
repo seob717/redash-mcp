@@ -142,13 +142,23 @@ function setupDesktop(mcpEntry: any) {
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf8");
 }
 
+export function buildClaudeMcpRemoveArgs(): string[] {
+  return ["mcp", "remove", "--scope", "user", "redash-mcp"];
+}
+
 function setupClaudeCode(mcpEntry: any) {
+  // claude mcp add fails if the server name already exists, so remove any previous entry first
+  try {
+    execFileSync("claude", buildClaudeMcpRemoveArgs(), { stdio: "pipe" });
+  } catch {}
+
   const args = buildClaudeMcpAddArgs(mcpEntry);
   try {
     execFileSync("claude", args, { stdio: "pipe" });
-  } catch {
+  } catch (e: any) {
+    const stderr = e?.stderr?.toString().trim();
     throw new Error(
-      `Failed to run "claude mcp add". Make sure the Claude Code CLI is installed, or run manually:\n  claude ${args.join(" ")}`
+      `Failed to run "claude mcp add".${stderr ? ` (${stderr})` : ""} Make sure the Claude Code CLI is installed, or run manually:\n  claude ${args.join(" ")}`
     );
   }
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildClaudeMcpAddArgs } from "../src/setup.js";
+import { buildClaudeMcpAddArgs, buildClaudeMcpRemoveArgs } from "../src/setup.js";
 
 describe("buildClaudeMcpAddArgs", () => {
   const entry = {
@@ -34,5 +34,18 @@ describe("buildClaudeMcpAddArgs", () => {
   it("places the server name before -e flags", () => {
     const args = buildClaudeMcpAddArgs(entry);
     expect(args.indexOf("redash-mcp")).toBeLessThan(args.indexOf("-e"));
+  });
+});
+
+describe("buildClaudeMcpRemoveArgs", () => {
+  // claude mcp add는 같은 이름이 이미 있으면 실패하므로, 멱등성을 위해 add 전에 remove가 필요하다
+  it("removes the existing user-scope entry", () => {
+    expect(buildClaudeMcpRemoveArgs()).toEqual([
+      "mcp",
+      "remove",
+      "--scope",
+      "user",
+      "redash-mcp",
+    ]);
   });
 });
