@@ -85,6 +85,8 @@ export function buildClaudeMcpAddArgs(mcpEntry: McpEntry): string[] {
   ];
 }
 
+type TargetId = "desktop" | "cli" | "cursor" | "gemini" | "codex";
+
 export async function main() {
   p.intro("redash-mcp setup wizard");
 
@@ -144,7 +146,7 @@ export async function main() {
     },
   };
 
-  const registrars: Record<string, { label: string; run: (entry: McpEntry) => void }> = {
+  const registrars: Record<TargetId, { label: string; run: (entry: McpEntry) => void }> = {
     desktop: { label: "Claude Desktop", run: (entry) => writeJsonConfig(getDesktopConfigPath(), entry) },
     cli: {
       label: "Claude Code (CLI)",
@@ -162,7 +164,7 @@ export async function main() {
   };
 
   const failed: string[] = [];
-  for (const target of targets) {
+  for (const target of targets as TargetId[]) {
     const { label, run } = registrars[target];
     const s = p.spinner();
     s.start(`Configuring ${label}...`);
