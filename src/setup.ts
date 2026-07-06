@@ -93,6 +93,9 @@ export async function main() {
     options: [
       { value: "desktop", label: "Claude Desktop" },
       { value: "cli", label: "Claude Code (CLI)" },
+      { value: "cursor", label: "Cursor" },
+      { value: "gemini", label: "Gemini CLI" },
+      { value: "codex", label: "Codex CLI" },
     ],
     required: true,
   });
@@ -132,7 +135,7 @@ export async function main() {
   const url = redashUrl.replace(/\/$/, "");
   const npxPath = findNpxPath();
 
-  const mcpEntry = {
+  const mcpEntry: McpEntry = {
     command: npxPath,
     args: ["-y", "redash-mcp"],
     env: {
@@ -141,21 +144,44 @@ export async function main() {
     },
   };
 
-  const s = p.spinner();
+  const registrars: Record<string, { label: string; run: (entry: McpEntry) => void }> = {
+    desktop: { label: "Claude Desktop", run: (entry) => writeJsonConfig(getDesktopConfigPath(), entry) },
+    cli: {
+      label: "Claude Code (CLI)",
+      run: (entry) => registerViaCli("claude", buildClaudeMcpRemoveArgs(), buildClaudeMcpAddArgs(entry)),
+    },
+    cursor: { label: "Cursor", run: (entry) => writeJsonConfig(getCursorConfigPath(), entry) },
+    gemini: {
+      label: "Gemini CLI",
+      run: (entry) => registerViaCli("gemini", buildGeminiMcpRemoveArgs(), buildGeminiMcpAddArgs(entry)),
+    },
+    codex: {
+      label: "Codex CLI",
+      run: (entry) => registerViaCli("codex", buildCodexMcpRemoveArgs(), buildCodexMcpAddArgs(entry)),
+    },
+  };
 
-  if (targets.includes("desktop")) {
-    s.start("Configuring Claude Desktop...");
-    writeJsonConfig(getDesktopConfigPath(), mcpEntry);
-    s.stop("Claude Desktop configured");
+  const failed: string[] = [];
+  for (const target of targets) {
+    const { label, run } = registrars[target];
+    const s = p.spinner();
+    s.start(`Configuring ${label}...`);
+    try {
+      run(mcpEntry);
+      s.stop(`${label} configured`);
+    } catch (e: any) {
+      s.error(`${label} failed`);
+      p.log.error(e?.message ?? String(e));
+      failed.push(label);
+    }
   }
 
-  if (targets.includes("cli")) {
-    s.start("Configuring Claude Code (CLI)...");
-    setupClaudeCode(mcpEntry);
-    s.stop("Claude Code (CLI) configured");
+  if (failed.length > 0) {
+    process.exitCode = 1;
+    p.outro(`Setup finished with errors — failed: ${failed.join(", ")}`);
+  } else {
+    p.outro("Setup complete. Restart to start using redash-mcp.");
   }
-
-  p.outro("Setup complete. Restart to start using redash-mcp.");
 }
 
 export function writeJsonConfig(configPath: string, mcpEntry: McpEntry) {
@@ -184,19 +210,18 @@ export function buildClaudeMcpRemoveArgs(): string[] {
   return ["mcp", "remove", "--scope", "user", "redash-mcp"];
 }
 
-function setupClaudeCode(mcpEntry: any) {
-  // claude mcp add fails if the server name already exists, so remove any previous entry first
+function registerViaCli(bin: string, removeArgs: string[], addArgs: string[]) {
+  // add fails if the server name already exists, so remove any previous entry first
   try {
-    execFileSync("claude", buildClaudeMcpRemoveArgs(), { stdio: "pipe" });
+    execFileSync(bin, removeArgs, { stdio: "pipe" });
   } catch {}
 
-  const args = buildClaudeMcpAddArgs(mcpEntry);
   try {
-    execFileSync("claude", args, { stdio: "pipe" });
+    execFileSync(bin, addArgs, { stdio: "pipe" });
   } catch (e: any) {
     const stderr = e?.stderr?.toString().trim();
     throw new Error(
-      `Failed to run "claude mcp add".${stderr ? ` (${stderr})` : ""} Make sure the Claude Code CLI is installed, or run manually:\n  claude ${args.join(" ")}`
+      `Failed to run "${bin} mcp add".${stderr ? ` (${stderr})` : ""} Make sure the ${bin} CLI is installed, or run manually:\n  ${bin} ${addArgs.join(" ")}`
     );
   }
 }
