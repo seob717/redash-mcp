@@ -7,22 +7,15 @@
   "author": "seob717",
   "keywords": [
     "mcp",
-    "mcp-server",
-    "model-context-protocol",
     "redash",
-    "redash-api",
-    "claude",
-    "claude-ai",
-    "anthropic",
     "sql",
-    "text-to-sql",
-    "llm",
-    "ai",
     "bi",
-    "business-intelligence",
     "dashboard",
-    "data-analytics",
-    "natural-language"
+    "model-context-protocol",
+    "claude",
+    "cursor",
+    "gemini-cli",
+    "codex"
   ],
   "engines": {
     "node": ">=20"

@@ -5,10 +5,14 @@
 [![Node](https://img.shields.io/node/v/redash-mcp.svg)](https://nodejs.org)
 [![smithery badge](https://smithery.ai/badge/dev-seob717/redash-mcp)](https://smithery.ai/servers/dev-seob717/redash-mcp)
 [![Glama](https://glama.ai/mcp/servers/seob717/redash-mcp/badges/score.svg)](https://glama.ai/mcp/servers/seob717/redash-mcp)
+[![Claude](https://img.shields.io/badge/Claude-Compatible-D97757?logo=claude&logoColor=white)](https://github.com/seob717/redash-mcp#installation)
+[![Cursor](https://img.shields.io/badge/Cursor-Compatible-111111)](https://github.com/seob717/redash-mcp#installation)
+[![Gemini CLI](https://img.shields.io/badge/Gemini_CLI-Compatible-4285F4?logo=googlegemini&logoColor=white)](https://github.com/seob717/redash-mcp#installation)
+[![Codex CLI](https://img.shields.io/badge/Codex_CLI-Compatible-412991?logo=openai&logoColor=white)](https://github.com/seob717/redash-mcp#installation)
 
 [English](README.md) | 한국어 | [日本語](README.ja.md)
 
-> [Redash](https://redash.io)를 Claude AI에 연결하는 MCP 서버 — 자연어로 데이터를 조회하고, SQL을 실행하고, 대시보드를 관리하세요.
+> [Redash](https://redash.io)를 Claude, Cursor, Gemini CLI, Codex 등 모든 MCP 클라이언트에 연결하는 MCP 서버 — 자연어로 데이터를 조회하고, 대시보드를 관리하고, SQL을 실행합니다.
 
 [왜 redash-mcp인가](#왜-redash-mcp인가) · [기능](#기능) · [설치](#설치) · [환경 변수](#환경-변수) · [사용 예시](#사용-예시) · [Privacy](#privacy-policy)
 
@@ -24,7 +28,7 @@ Redash MCP 서버는 여러 개 있습니다. 이 서버는 LLM이 **운영(prod
 
 - **🛡️ SQL 안전 가드** — `DROP`/`TRUNCATE`/`ALTER`, `WHERE` 없는 `DELETE`/`UPDATE`를 차단합니다. `strict`/`warn`/`off` 모드, PII 감지, 자동 `LIMIT`까지 지원해 실제 Redash를 Claude에 안심하고 맡길 수 있습니다.
 - **🧠 BIRD 스마트 쿼리** — 질문을 분석해 적절한 테이블을 자동 선택하고 SQL 생성을 가이드합니다([BIRD text-to-SQL](https://bird-bench.github.io/) 방법론 기반). 테이블 선택용 Claude Haiku 폴백도 선택적으로 지원합니다.
-- **⚡ 한 번의 명령으로 설치** — `npx redash-mcp setup`이 Claude Desktop / Claude Code 설정을 대신 잡아줍니다. JSON을 직접 손댈 필요가 없습니다.
+- **⚡ 한 번의 명령으로 설치** — `npx redash-mcp setup`이 Claude Desktop / Claude Code / Cursor / Gemini CLI / Codex CLI 설정을 대신 잡아줍니다. JSON을 직접 손댈 필요가 없습니다.
 - **🔒 완전 로컬** — Redash 인스턴스와 직접 통신하며, API 키와 쿼리 결과가 기기를 벗어나지 않습니다.
 - **📊 처음부터 끝까지** — 조회·저장·복제, 대시보드, 위젯, 알림까지 6개 카테고리에 걸친 20개 이상의 툴.
 
@@ -86,7 +90,7 @@ Redash MCP 서버는 여러 개 있습니다. 이 서버는 LLM이 **운영(prod
 npx redash-mcp setup
 ```
 
-설치 마법사가 실행되며 Claude Desktop, Claude Code(CLI), 또는 둘 다 선택하여 설정할 수 있습니다.
+설정 마법사가 Claude Desktop, Claude Code (CLI), Cursor, Gemini CLI, Codex CLI 중 원하는 조합을 골라 설정해줍니다.
 
 ### 셸 스크립트로 설치
 
@@ -123,9 +127,18 @@ Redash → 우측 상단 프로필 → **Edit Profile** → **API Key** 복사
 
 저장 후 Claude Desktop을 완전히 종료했다가 다시 시작합니다.
 
-#### 2-B. Claude Code (CLI) 설정
+#### 2-B. Claude Code (CLI)
 
-`~/.claude/settings.json` 파일을 열고 아래 내용을 추가합니다:
+```bash
+claude mcp add --scope user redash-mcp \
+  -e REDASH_URL=https://your-redash-instance.com \
+  -e REDASH_API_KEY=your_api_key_here \
+  -- npx -y redash-mcp
+```
+
+#### 2-C. Cursor
+
+`~/.cursor/mcp.json` 파일을 열고(없으면 생성) 다음을 추가합니다:
 
 ```json
 {
@@ -140,6 +153,24 @@ Redash → 우측 상단 프로필 → **Edit Profile** → **API Key** 복사
     }
   }
 }
+```
+
+#### 2-D. Gemini CLI
+
+```bash
+gemini mcp add -s user \
+  -e REDASH_URL=https://your-redash-instance.com \
+  -e REDASH_API_KEY=your_api_key_here \
+  redash-mcp npx -y redash-mcp
+```
+
+#### 2-E. Codex CLI
+
+```bash
+codex mcp add redash-mcp \
+  --env REDASH_URL=https://your-redash-instance.com \
+  --env REDASH_API_KEY=your_api_key_here \
+  -- npx -y redash-mcp
 ```
 
 > **macOS**: `npx`를 못 찾는 경우 `which npx` 명령어로 전체 경로를 확인 후 대체하세요.
