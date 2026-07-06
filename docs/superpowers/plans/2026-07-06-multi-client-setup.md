@@ -422,7 +422,7 @@ Replace everything in `main()` from `const s = p.spinner();` down to (and includ
       run(mcpEntry);
       s.stop(`${label} configured`);
     } catch (e: any) {
-      s.stop(`${label} failed`, 1);
+      s.error(`${label} failed`);
       p.log.error(e?.message ?? String(e));
       failed.push(label);
     }
