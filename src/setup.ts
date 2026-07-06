@@ -2,7 +2,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
-import { execSync } from "child_process";
+import { execFileSync, execSync } from "child_process";
 import * as p from "@clack/prompts";
 
 function findNpxPath(): string {
@@ -32,8 +32,22 @@ function getDesktopConfigPath(): string {
   }
 }
 
-function getClaudeCodeConfigPath(): string {
-  return path.join(os.homedir(), ".claude", "settings.json");
+export function buildClaudeMcpAddArgs(mcpEntry: {
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+}): string[] {
+  return [
+    "mcp",
+    "add",
+    "--scope",
+    "user",
+    "redash-mcp",
+    ...Object.entries(mcpEntry.env).flatMap(([key, value]) => ["-e", `${key}=${value}`]),
+    "--",
+    mcpEntry.command,
+    ...mcpEntry.args,
+  ];
 }
 
 export async function main() {
@@ -129,20 +143,12 @@ function setupDesktop(mcpEntry: any) {
 }
 
 function setupClaudeCode(mcpEntry: any) {
-  const configPath = getClaudeCodeConfigPath();
-  let config: any = {};
-
-  if (fs.existsSync(configPath)) {
-    try {
-      config = JSON.parse(fs.readFileSync(configPath, "utf8"));
-    } catch {
-      throw new Error(`Failed to read Claude Code settings.json: ${configPath}`);
-    }
-  } else {
-    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+  const args = buildClaudeMcpAddArgs(mcpEntry);
+  try {
+    execFileSync("claude", args, { stdio: "pipe" });
+  } catch {
+    throw new Error(
+      `Failed to run "claude mcp add". Make sure the Claude Code CLI is installed, or run manually:\n  claude ${args.join(" ")}`
+    );
   }
-
-  config.mcpServers ??= {};
-  config.mcpServers["redash-mcp"] = mcpEntry;
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf8");
 }
