@@ -605,22 +605,7 @@ Apply the same replacement in `README.ko.md` / `README.ja.md` at their `#### 2-B
 
 - [ ] **Step 5: package.json keywords**
 
-In `package.json`, extend keywords:
-
-```json
-  "keywords": [
-    "mcp",
-    "redash",
-    "sql",
-    "bi",
-    "dashboard",
-    "model-context-protocol",
-    "claude",
-    "cursor",
-    "gemini-cli",
-    "codex"
-  ],
-```
+In `package.json`, keep every existing keyword (the v3.1.5 list of 17) and append exactly three: `"cursor"`, `"gemini-cli"`, `"codex"` — final list is 20 entries ending with those three. Do not remove or reorder existing entries.
 
 - [ ] **Step 6: Verify and commit**
 
