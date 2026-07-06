@@ -3,7 +3,6 @@
 [![npm version](https://img.shields.io/npm/v/redash-mcp.svg)](https://www.npmjs.com/package/redash-mcp)
 [![Downloads](https://img.shields.io/npm/dm/redash-mcp.svg)](https://www.npmjs.com/package/redash-mcp)
 [![Node](https://img.shields.io/node/v/redash-mcp.svg)](https://nodejs.org)
-[![smithery badge](https://smithery.ai/badge/dev-seob717/redash-mcp)](https://smithery.ai/servers/dev-seob717/redash-mcp)
 [![Glama](https://glama.ai/mcp/servers/seob717/redash-mcp/badges/score.svg)](https://glama.ai/mcp/servers/seob717/redash-mcp)
 [![Claude](https://img.shields.io/badge/Claude-Compatible-D97757?logo=claude&logoColor=white)](https://github.com/seob717/redash-mcp#installation)
 [![Cursor](https://img.shields.io/badge/Cursor-Compatible-111111)](https://github.com/seob717/redash-mcp#installation)
