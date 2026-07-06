@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   buildGeminiMcpAddArgs,
   buildGeminiMcpRemoveArgs,
+  buildCodexMcpAddArgs,
+  buildCodexMcpRemoveArgs,
 } from "../src/setup.js";
 
 const entry = {
@@ -42,5 +44,30 @@ describe("buildGeminiMcpRemoveArgs", () => {
       "user",
       "redash-mcp",
     ]);
+  });
+});
+
+describe("buildCodexMcpAddArgs", () => {
+  // codex는 전역 설정 단일 스코프라 scope 플래그가 없다; 커맨드는 -- 뒤에 온다
+  it("registers globally with the command after --", () => {
+    expect(buildCodexMcpAddArgs(entry)).toEqual([
+      "mcp",
+      "add",
+      "redash-mcp",
+      "--env",
+      "REDASH_URL=https://redash.example.com",
+      "--env",
+      "REDASH_API_KEY=secret-key",
+      "--",
+      "/usr/local/bin/npx",
+      "-y",
+      "redash-mcp",
+    ]);
+  });
+});
+
+describe("buildCodexMcpRemoveArgs", () => {
+  it("removes the entry", () => {
+    expect(buildCodexMcpRemoveArgs()).toEqual(["mcp", "remove", "redash-mcp"]);
   });
 });

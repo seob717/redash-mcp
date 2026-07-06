@@ -55,6 +55,22 @@ export function buildGeminiMcpRemoveArgs(): string[] {
   return ["mcp", "remove", "-s", "user", "redash-mcp"];
 }
 
+export function buildCodexMcpAddArgs(mcpEntry: McpEntry): string[] {
+  return [
+    "mcp",
+    "add",
+    "redash-mcp",
+    ...Object.entries(mcpEntry.env).flatMap(([key, value]) => ["--env", `${key}=${value}`]),
+    "--",
+    mcpEntry.command,
+    ...mcpEntry.args,
+  ];
+}
+
+export function buildCodexMcpRemoveArgs(): string[] {
+  return ["mcp", "remove", "redash-mcp"];
+}
+
 export function buildClaudeMcpAddArgs(mcpEntry: McpEntry): string[] {
   return [
     "mcp",
