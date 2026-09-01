@@ -1,4 +1,5 @@
 import type { PrunedTable, FewShotExample } from "./types.js";
+import { tokenize } from "./tokenize.js";
 
 export interface SchemaTable {
   name: string;
@@ -12,11 +13,11 @@ export function pruneSchema(
   topK: number,
   keywordMap?: Record<string, string[]>,
 ): PrunedTable[] {
-  const tokens = tokenizeQuestion(question);
+  const tokens = tokenize(question);
   if (tokens.length === 0) {
     return fullSchema.slice(0, topK).map((t) => ({
       name: t.name,
-      columns: t.columns ?? [],
+      columns: t.columns,
       score: 0,
     }));
   }
@@ -28,11 +29,13 @@ export function pruneSchema(
     }
   }
 
+  const expandedTokens = expandTokens(tokens, keywordMap);
+
   const scored = fullSchema.map((table) => {
-    const score = scoreTable(table, tokens, fewShotTableSet, keywordMap);
+    const score = scoreTable(table, expandedTokens, fewShotTableSet);
     return {
       name: table.name,
-      columns: table.columns ?? [],
+      columns: table.columns,
       score,
     };
   });
@@ -46,12 +49,15 @@ function expandTokens(tokens: string[], keywordMap?: Record<string, string[]>): 
   if (!keywordMap) return tokens;
   const expanded = [...tokens];
   for (const token of tokens) {
-    if (keywordMap[token]) {
-      expanded.push(...keywordMap[token]);
+    // Array.isArray also guards against prototype-chain hits for tokens
+    // like "constructor" on a plain object map.
+    const direct = keywordMap[token];
+    if (Array.isArray(direct)) {
+      expanded.push(...direct);
       continue;
     }
     for (const [keyword, mappings] of Object.entries(keywordMap)) {
-      if (token.includes(keyword) || keyword.includes(token)) {
+      if (Array.isArray(mappings) && (token.includes(keyword) || keyword.includes(token))) {
         expanded.push(...mappings);
       }
     }
@@ -61,13 +67,11 @@ function expandTokens(tokens: string[], keywordMap?: Record<string, string[]>): 
 
 function scoreTable(
   table: SchemaTable,
-  tokens: string[],
+  expandedTokens: string[],
   fewShotTables: Set<string>,
-  keywordMap?: Record<string, string[]>,
 ): number {
   let score = 0;
   const tableLower = table.name.toLowerCase();
-  const expandedTokens = expandTokens(tokens, keywordMap);
 
   for (const token of expandedTokens) {
     if (tableLower.includes(token)) {
@@ -78,7 +82,7 @@ function scoreTable(
     }
   }
 
-  for (const col of table.columns ?? []) {
+  for (const col of table.columns) {
     const colLower = col.name.toLowerCase();
     for (const token of expandedTokens) {
       if (colLower.includes(token)) {
@@ -109,28 +113,4 @@ export function formatPrunedSchema(tables: PrunedTable[]): string {
     lines.push("");
   }
   return lines.join("\n");
-}
-
-function tokenizeQuestion(question: string): string[] {
-  const STOP_WORDS = new Set([
-    "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
-    "have", "has", "had", "do", "does", "did", "will", "would", "could",
-    "should", "may", "might", "can", "need",
-    "to", "of", "in", "for", "on", "with", "at", "by", "from", "as",
-    "and", "but", "or", "not", "no", "so",
-    "me", "my", "i", "you", "your", "we", "our", "they", "their",
-    "it", "its", "this", "that", "what", "which", "how", "where", "when", "why",
-    "show", "give", "tell", "get", "find", "list", "display", "many", "much",
-    "select", "count", "sum", "avg", "all", "each", "every",
-    "의", "가", "이", "은", "는", "을", "를", "에", "에서", "와", "과",
-    "도", "로", "으로", "만", "까지", "부터",
-    "좀", "해줘", "알려줘", "보여줘", "해", "하는", "된", "인", "수",
-    "총", "전체", "모든", "몇", "얼마나",
-  ]);
-
-  return question
-    .toLowerCase()
-    .replace(/[^\w\sㄱ-ㅎㅏ-ㅣ가-힣]/g, " ")
-    .split(/\s+/)
-    .filter((w) => w.length > 1 && !STOP_WORDS.has(w));
 }

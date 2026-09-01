@@ -3,7 +3,7 @@ import { ensureConfigDir, getDataSourcePath, loadConfig } from "./config.js";
 import { addExample } from "./few-shot.js";
 import type { FeedbackEntry } from "./types.js";
 
-export async function loadFeedback(dataSourceId: number): Promise<FeedbackEntry[]> {
+async function loadFeedback(dataSourceId: number): Promise<FeedbackEntry[]> {
   try {
     const raw = await readFile(getDataSourcePath("feedback", dataSourceId), "utf-8");
     const parsed = JSON.parse(raw);
@@ -42,20 +42,29 @@ export async function recordFeedback(
   if (newEntry.rating === "down" && newEntry.correctSql && newEntry.errorType) {
     const config = await loadConfig();
     if (config.bird.feedback.enabled) {
-      const sameErrorCount = entries.filter(
+      const sameErrorEntries = entries.filter(
         (e) => e.errorType === newEntry.errorType && e.rating === "down" && !e.promotedToFewShot,
-      ).length;
+      );
 
-      if (sameErrorCount >= config.bird.feedback.autoPromoteThreshold) {
+      if (sameErrorEntries.length >= config.bird.feedback.autoPromoteThreshold) {
         await promoteToFewShot(dataSourceId, newEntry);
-        newEntry.promotedToFewShot = true;
+        // Mark every counted entry so the threshold counter resets and the
+        // next feedback of this type does not promote a duplicate example.
+        for (const e of sameErrorEntries) {
+          e.promotedToFewShot = true;
+        }
       }
     }
   }
 
-  await saveFeedback(dataSourceId, entries);
+  const trimmed = entries.length > MAX_FEEDBACK_ENTRIES
+    ? entries.slice(-MAX_FEEDBACK_ENTRIES)
+    : entries;
+  await saveFeedback(dataSourceId, trimmed);
   return newEntry;
 }
+
+const MAX_FEEDBACK_ENTRIES = 500;
 
 export function classifyError(generatedSql: string, correctSql: string): string {
   const genTables = extractTables(generatedSql);

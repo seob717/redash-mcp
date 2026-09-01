@@ -41,9 +41,10 @@ export interface EvalRun {
   results: EvalRunResult[];
   accuracy: {
     overall: number;
-    simple: number;
-    medium: number;
-    complex: number;
+    // null = no test cases at that difficulty in the run
+    simple: number | null;
+    medium: number | null;
+    complex: number | null;
   };
 }
 
@@ -73,12 +74,9 @@ export interface SmartQueryResponse {
 
 export interface BirdConfig {
   bird: {
-    enabled: boolean;
     schemaPruning: {
       enabled: boolean;
       topK: number;
-      includeSampleValues: boolean;
-      maxSampleValues: number;
     };
     fewShot: {
       enabled: boolean;

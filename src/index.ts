@@ -7,7 +7,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { analyzeQuery } from "./sql-guard.js";
 import { getCached, setCached } from "./query-cache.js";
-import { REDASH_URL, REDASH_API_KEY, redashFetch, pollQueryResult, formatAsMarkdownTable, fetchSchema } from "./redash-client.js";
+import { REDASH_URL, REDASH_API_KEY, redashFetch, resolveQueryResult, executeSql, formatQueryResult, fetchSchema } from "./redash-client.js";
 import { registerBirdTools } from "./bird/tools.js";
 import { handleToolError } from "./tool-error.js";
 
@@ -112,9 +112,9 @@ server.tool(
           results.push(`Table '${name}' not found. Use list_tables to verify the table name.`);
           continue;
         }
-        const cols = (table.columns ?? []).map((c: any) =>
-          typeof c === "string" ? c : `${c.name} (${c.type ?? "unknown"})`
-        ).join("\n");
+        const cols = table.columns
+          .map((c: any) => `${c.name} (${c.type ?? "unknown"})`)
+          .join("\n");
         results.push(`[${table.name}]\n${cols}`);
       }
 
@@ -155,66 +155,33 @@ server.tool(
       const effectiveQuery = guard.modifiedQuery ?? query;
       const effectiveMaxAge = max_age ?? DEFAULT_MAX_AGE;
 
-      const cached = getCached(data_source_id, effectiveQuery);
+      // max_age 0 is an explicit request for fresh data — bypass the MCP cache too.
+      const cached = effectiveMaxAge === 0 ? null : getCached(data_source_id, effectiveQuery);
       if (cached) {
         const { rows, columns, warningPrefix } = cached;
-        const displayRows = rows.slice(0, max_rows);
-        const truncated = rows.length > max_rows
-          ? `\n⚠️ Showing ${max_rows} of ${rows.length} rows.`
-          : "";
-        let body: string;
-        if (format === "json") {
-          body = JSON.stringify(displayRows, null, 2);
-        } else {
-          body = formatAsMarkdownTable(columns, displayRows);
-        }
-        const cacheNote = "Returned from MCP cache.\n\n";
         return {
           content: [
             {
               type: "text",
-              text: `${warningPrefix}${cacheNote}${rows.length} rows | Columns: ${columns.join(", ")}${truncated}\n\n${body}`,
+              text: `${warningPrefix}Returned from MCP cache.\n\n${formatQueryResult(columns, rows, max_rows, format)}`,
             },
           ],
         };
       }
 
-      const res = await redashFetch("/query_results", {
-        method: "POST",
-        body: JSON.stringify({ data_source_id, query: effectiveQuery, max_age: effectiveMaxAge }),
+      const { columns, rows } = await executeSql(data_source_id, effectiveQuery, {
+        maxAge: effectiveMaxAge,
+        timeoutSecs: timeout_secs,
       });
-
-      let result;
-      if (res.job) {
-        result = await pollQueryResult(res.job.id, timeout_secs);
-      } else {
-        result = res;
-      }
-
-      const qr = result.query_result;
-      const rows = qr.data.rows;
-      const columns = qr.data.columns.map((c: any) => c.name);
 
       const warningPrefix = guard.message ? `${guard.message}\n\n` : "";
       setCached(data_source_id, effectiveQuery, { rows, columns, warningPrefix });
-
-      const displayRows = rows.slice(0, max_rows);
-      const truncated = rows.length > max_rows
-        ? `\n⚠️ Showing ${max_rows} of ${rows.length} rows.`
-        : "";
-
-      let body: string;
-      if (format === "json") {
-        body = JSON.stringify(displayRows, null, 2);
-      } else {
-        body = formatAsMarkdownTable(columns, displayRows);
-      }
 
       return {
         content: [
           {
             type: "text",
-            text: `${warningPrefix}${rows.length} rows | Columns: ${columns.join(", ")}${truncated}\n\n${body}`,
+            text: `${warningPrefix}${formatQueryResult(columns, rows, max_rows, format)}`,
           },
         ],
       };
@@ -276,33 +243,13 @@ server.tool(
         body: JSON.stringify({}),
       });
 
-      let result;
-      if (res.job) {
-        result = await pollQueryResult(res.job.id, timeout_secs);
-      } else {
-        result = res;
-      }
-
-      const qr = result.query_result;
-      const rows = qr.data.rows;
-      const columns = qr.data.columns.map((c: any) => c.name);
-      const displayRows = rows.slice(0, max_rows);
-      const truncated = rows.length > max_rows
-        ? `\n⚠️ Showing ${max_rows} of ${rows.length} rows.`
-        : "";
-
-      let body: string;
-      if (format === "json") {
-        body = JSON.stringify(displayRows, null, 2);
-      } else {
-        body = formatAsMarkdownTable(columns, displayRows);
-      }
+      const { columns, rows } = await resolveQueryResult(res, timeout_secs);
 
       return {
         content: [
           {
             type: "text",
-            text: `Query ID: ${query_id}\n${rows.length} rows | Columns: ${columns.join(", ")}${truncated}\n\n${body}`,
+            text: `Query ID: ${query_id}\n${formatQueryResult(columns, rows, max_rows, format)}`,
           },
         ],
       };

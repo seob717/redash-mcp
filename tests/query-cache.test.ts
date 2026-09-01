@@ -30,6 +30,21 @@ describe("query-cache", () => {
     expect(mod.getCached(1, "select id from users\n")).not.toBeNull();
   });
 
+  it("does not collide queries whose literals contain comment markers", () => {
+    mod.setCached(1, "SELECT * FROM t WHERE code = 'A--1'", { rows: [{ a: 1 }], columns: ["a"], warningPrefix: "" });
+    expect(mod.getCached(1, "SELECT * FROM t WHERE code = 'A--2'")).toBeNull();
+  });
+
+  it("does not collide literals that differ only in case", () => {
+    mod.setCached(1, "select * from t where s = 'Paid'", { rows: [{ a: 1 }], columns: ["a"], warningPrefix: "" });
+    expect(mod.getCached(1, "select * from t where s = 'paid'")).toBeNull();
+  });
+
+  it("still ignores comments outside literals for the key", () => {
+    mod.setCached(1, "SELECT 1 -- note", { rows: [], columns: [], warningPrefix: "" });
+    expect(mod.getCached(1, "select 1")).not.toBeNull();
+  });
+
   it("keys on data source id", () => {
     mod.setCached(1, "select 1", { rows: [{ a: 1 }], columns: ["a"], warningPrefix: "" });
     expect(mod.getCached(2, "select 1")).toBeNull();

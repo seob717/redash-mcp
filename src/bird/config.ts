@@ -1,4 +1,4 @@
-import { readFile, mkdir, writeFile } from "node:fs/promises";
+import { readFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -6,12 +6,9 @@ import type { BirdConfig } from "./types.js";
 
 const DEFAULT_CONFIG: BirdConfig = {
   bird: {
-    enabled: true,
     schemaPruning: {
       enabled: true,
       topK: 7,
-      includeSampleValues: true,
-      maxSampleValues: 5,
     },
     fewShot: {
       enabled: true,
@@ -67,12 +64,6 @@ export async function loadConfig(): Promise<BirdConfig> {
   } catch {
     return DEFAULT_CONFIG;
   }
-}
-
-export async function saveConfig(config: BirdConfig): Promise<void> {
-  await ensureConfigDir();
-  const configPath = path.join(getConfigDir(), "config.json");
-  await writeFile(configPath, JSON.stringify(config, null, 2), "utf-8");
 }
 
 function deepMerge(target: any, source: any): any {

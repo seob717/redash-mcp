@@ -73,7 +73,7 @@ describe("analyzeQuery (warn mode, default)", () => {
   it("auto-injects LIMIT when REDASH_AUTO_LIMIT is set", () => {
     process.env.REDASH_AUTO_LIMIT = "100";
     const r = analyzeQuery("SELECT id FROM users WHERE id > 0");
-    expect(r.modifiedQuery).toBe("SELECT id FROM users WHERE id > 0 LIMIT 100");
+    expect(r.modifiedQuery).toBe("SELECT id FROM users WHERE id > 0\nLIMIT 100");
   });
 
   it("does not inject LIMIT when one already exists", () => {
@@ -94,6 +94,72 @@ describe("analyzeQuery (off mode)", () => {
     const r = analyzeQuery("DROP TABLE users");
     expect(r.blocked).toBe(false);
     expect(r.warnings).toEqual([]);
+  });
+});
+
+describe("analyzeQuery (leading comments)", () => {
+  it("applies COST checks to a SELECT preceded by a comment", () => {
+    process.env.REDASH_AUTO_LIMIT = "1000";
+    const r = analyzeQuery("-- monthly report\nSELECT * FROM events");
+    expect(r.warnings.some((w) => w.includes("SELECT *"))).toBe(true);
+    expect(r.modifiedQuery).toContain("LIMIT 1000");
+  });
+
+  it("blocks a SELECT preceded by a comment in strict mode", () => {
+    process.env.REDASH_SAFETY_MODE = "strict";
+    const r = analyzeQuery("-- monthly report\nSELECT * FROM events");
+    expect(r.blocked).toBe(true);
+  });
+});
+
+describe("injectLimit correctness", () => {
+  it("strips a trailing semicolon before appending LIMIT", () => {
+    process.env.REDASH_AUTO_LIMIT = "1000";
+    const r = analyzeQuery("SELECT id FROM orders;");
+    expect(r.modifiedQuery).toMatch(/orders\s*\nLIMIT 1000$/);
+    expect(r.modifiedQuery).not.toContain(";");
+  });
+
+  it("does not bury the LIMIT inside a trailing line comment", () => {
+    process.env.REDASH_AUTO_LIMIT = "1000";
+    const r = analyzeQuery("SELECT id FROM orders WHERE id > 0 -- all rows");
+    expect(r.modifiedQuery).toMatch(/\nLIMIT 1000$/);
+  });
+
+  it("still injects LIMIT when the word LIMIT only appears in a comment", () => {
+    process.env.REDASH_AUTO_LIMIT = "1000";
+    const r = analyzeQuery("SELECT id FROM orders WHERE id = 1 /* no LIMIT yet */");
+    expect(r.modifiedQuery).toContain("LIMIT 1000");
+  });
+});
+
+describe("string literal handling", () => {
+  it("does not flag PII keywords inside string literals", () => {
+    const r = analyzeQuery("SELECT id FROM t WHERE channel = 'EMAIL' LIMIT 10");
+    expect(r.warnings.some((w) => w.startsWith("[PII]"))).toBe(false);
+  });
+
+  it("does not block destructive keywords inside string literals", () => {
+    const r = analyzeQuery("SELECT id FROM logs WHERE msg = 'DROP TABLE users' LIMIT 5");
+    expect(r.blocked).toBe(false);
+  });
+});
+
+describe("blocked messages", () => {
+  it("every blocked message tells how to disable the check", () => {
+    const destructive = [
+      "DROP TABLE users",
+      "TRUNCATE orders",
+      "ALTER TABLE users ADD COLUMN x INT",
+      "GRANT SELECT ON users TO bob",
+      "DELETE FROM users",
+      "UPDATE users SET active = false",
+    ];
+    for (const sql of destructive) {
+      const r = analyzeQuery(sql);
+      expect(r.blocked).toBe(true);
+      expect(r.message).toContain("REDASH_SAFETY_MODE=off");
+    }
   });
 });
 

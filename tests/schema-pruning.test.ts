@@ -60,4 +60,11 @@ describe("pruneSchema", () => {
     const top = r[0];
     expect(top.name).toBe("orders");
   });
+
+  it("does not crash on tokens that collide with Object prototype properties", () => {
+    const r = pruneSchema("which constructor has most wins", schema, [], 3, {
+      revenue: ["payment"],
+    });
+    expect(Array.isArray(r)).toBe(true);
+  });
 });
