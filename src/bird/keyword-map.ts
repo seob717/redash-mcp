@@ -1,8 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { ensureConfigDir, getDataSourcePath } from "./config.js";
 
-const DEFAULT_KEYWORD_MAP: Record<string, string[]> = {};
-
 function getMapPath(dataSourceId: number): string {
   return getDataSourcePath("keyword-map", dataSourceId);
 }
@@ -57,13 +55,5 @@ export async function resetMappings(dataSourceId: number): Promise<void> {
 }
 
 export async function getEffectiveMap(dataSourceId: number): Promise<Record<string, string[]>> {
-  const custom = await loadKeywordMap(dataSourceId);
-  const merged: Record<string, string[]> = { ...DEFAULT_KEYWORD_MAP };
-  for (const [key, values] of Object.entries(custom)) {
-    const existing = merged[key] ?? [];
-    merged[key] = [...new Set([...existing, ...values])];
-  }
-  return merged;
+  return loadKeywordMap(dataSourceId);
 }
-
-export { DEFAULT_KEYWORD_MAP };

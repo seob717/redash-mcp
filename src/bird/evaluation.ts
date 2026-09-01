@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { ensureConfigDir, getDataSourcePath } from "./config.js";
-import { redashFetch, pollQueryResult } from "../redash-client.js";
+import { executeSql } from "../redash-client.js";
+import { analyzeQuery } from "../sql-guard.js";
 import type { EvalTestCase, EvalRun, EvalRunResult } from "./types.js";
 
 interface EvalStore {
@@ -49,6 +50,7 @@ export async function removeTestCase(dataSourceId: number, testCaseId: string): 
 export async function runEvaluation(
   dataSourceId: number,
   generatedSqls: Array<{ testCaseId: string; generatedSql: string }>,
+  timeoutSecs = 30,
 ): Promise<EvalRun> {
   const store = await loadTestSuite(dataSourceId);
   const results: EvalRunResult[] = [];
@@ -66,7 +68,7 @@ export async function runEvaluation(
     }
 
     try {
-      const match = await compareQueryResults(dataSourceId, testCase.groundTruthSql, generatedSql);
+      const match = await compareQueryResults(dataSourceId, testCase.groundTruthSql, generatedSql, timeoutSecs);
       results.push({
         testCaseId,
         generatedSql,
@@ -93,7 +95,8 @@ export async function runEvaluation(
         testCase: store.testCases.find((tc) => tc.id === gs.testCaseId),
       }))
       .filter((gs) => gs.testCase?.difficulty === level);
-    if (relevant.length === 0) return 0;
+    // null = no test cases at this level, distinct from 0% accuracy.
+    if (relevant.length === 0) return null;
     const matches = relevant.filter((gs) =>
       results.find((r) => r.testCaseId === gs.testCaseId)?.match,
     ).length;
@@ -125,12 +128,20 @@ async function compareQueryResults(
   dataSourceId: number,
   groundTruthSql: string,
   generatedSql: string,
+  timeoutSecs: number,
 ): Promise<{ isMatch: boolean; details: string }> {
   const [gtResult, genResult] = await Promise.all([
-    executeQuery(dataSourceId, groundTruthSql),
-    executeQuery(dataSourceId, generatedSql),
+    executeGuarded(dataSourceId, groundTruthSql, timeoutSecs),
+    executeGuarded(dataSourceId, generatedSql, timeoutSecs),
   ]);
 
+  return compareResults(gtResult, genResult);
+}
+
+export function compareResults(
+  gtResult: { columns: string[]; rows: any[] },
+  genResult: { columns: string[]; rows: any[] },
+): { isMatch: boolean; details: string } {
   const gtCols = new Set(gtResult.columns);
   const genCols = new Set(genResult.columns);
   if (gtCols.size !== genCols.size || ![...gtCols].every((c) => genCols.has(c))) {
@@ -147,8 +158,10 @@ async function compareQueryResults(
     };
   }
 
+  // Serialize both sides in the ground-truth column order so a different
+  // SELECT order is not scored as a data mismatch.
   const gtSorted = sortRows(gtResult.rows, gtResult.columns);
-  const genSorted = sortRows(genResult.rows, genResult.columns);
+  const genSorted = sortRows(genResult.rows, gtResult.columns);
 
   for (let i = 0; i < gtSorted.length; i++) {
     if (gtSorted[i] !== genSorted[i]) {
@@ -162,27 +175,19 @@ async function compareQueryResults(
   return { isMatch: true, details: "Exact match" };
 }
 
-async function executeQuery(
+// Evaluation runs raw SQL from test cases, so it goes through the same
+// safety guard as run_query (block only — no query rewriting, since results
+// must be compared exactly).
+async function executeGuarded(
   dataSourceId: number,
   sql: string,
+  timeoutSecs: number,
 ): Promise<{ columns: string[]; rows: any[] }> {
-  const res = await redashFetch("/query_results", {
-    method: "POST",
-    body: JSON.stringify({ data_source_id: dataSourceId, query: sql, max_age: 0 }),
-  });
-
-  let result;
-  if (res.job) {
-    result = await pollQueryResult(res.job.id, 30);
-  } else {
-    result = res;
+  const guard = analyzeQuery(sql);
+  if (guard.blocked) {
+    throw new Error(`Blocked by SQL safety guard: ${guard.message.replace(/\s+/g, " ").trim()}`);
   }
-
-  const qr = result.query_result;
-  return {
-    columns: qr.data.columns.map((c: any) => c.name),
-    rows: qr.data.rows,
-  };
+  return executeSql(dataSourceId, sql, { maxAge: 0, timeoutSecs });
 }
 
 function sortRows(rows: any[], columns: string[]): string[] {
@@ -192,13 +197,15 @@ function sortRows(rows: any[], columns: string[]): string[] {
 }
 
 export function formatEvalResults(run: EvalRun): string {
+  const pct = (v: number | null) =>
+    v === null ? "N/A (no test cases)" : `${(v * 100).toFixed(1)}%`;
   const lines = [
     `## Evaluation Results (${run.timestamp})`,
     "",
     `**Overall Accuracy**: ${(run.accuracy.overall * 100).toFixed(1)}% (${run.results.filter((r) => r.match).length}/${run.results.length})`,
-    `- Simple: ${(run.accuracy.simple * 100).toFixed(1)}%`,
-    `- Medium: ${(run.accuracy.medium * 100).toFixed(1)}%`,
-    `- Complex: ${(run.accuracy.complex * 100).toFixed(1)}%`,
+    `- Simple: ${pct(run.accuracy.simple)}`,
+    `- Medium: ${pct(run.accuracy.medium)}`,
+    `- Complex: ${pct(run.accuracy.complex)}`,
     "",
   ];
 

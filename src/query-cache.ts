@@ -1,4 +1,5 @@
 import { createHash } from "crypto";
+import { normalizeCacheKey } from "./sql-text.js";
 
 interface CacheEntry {
   result: any;
@@ -24,22 +25,23 @@ function getMaxSizeBytes(): number {
   return Math.min(mb, MAX_CACHE_SIZE_MB) * 1024 * 1024;
 }
 
-function normalizeSQL(sql: string): string {
-  return sql
-    .replace(/--[^\n]*/g, " ")
-    .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
-}
-
 function makeCacheKey(dataSourceId: number, sql: string): string {
   return createHash("sha256")
-    .update(`${dataSourceId}:${normalizeSQL(sql)}`)
+    .update(`${dataSourceId}:${normalizeCacheKey(sql)}`)
     .digest("hex");
 }
 
+// Estimate from a row sample instead of stringifying huge result sets,
+// which would block the single-threaded stdio server.
+const SIZE_SAMPLE_ROWS = 100;
+
 function roughSize(obj: any): number {
+  const rows = obj?.rows;
+  if (Array.isArray(rows) && rows.length > SIZE_SAMPLE_ROWS) {
+    const sampled = JSON.stringify(rows.slice(0, SIZE_SAMPLE_ROWS)).length;
+    const rest = JSON.stringify({ ...obj, rows: [] }).length;
+    return Math.round((sampled / SIZE_SAMPLE_ROWS) * rows.length + rest) * 2;
+  }
   return JSON.stringify(obj).length * 2;
 }
 

@@ -2,10 +2,10 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { handleSmartQuery } from "./smart-query.js";
 import { loadExamples, addExample, removeExample } from "./few-shot.js";
-import { recordFeedback, loadFeedback } from "./feedback.js";
+import { recordFeedback } from "./feedback.js";
 import { loadTestSuite, addTestCase, removeTestCase, runEvaluation, formatEvalResults } from "./evaluation.js";
 import { loadConfig, getConfigDir } from "./config.js";
-import { getEffectiveMap, addMappings, removeMappings, resetMappings, loadKeywordMap, DEFAULT_KEYWORD_MAP } from "./keyword-map.js";
+import { addMappings, removeMappings, resetMappings, loadKeywordMap } from "./keyword-map.js";
 import { handleToolError } from "../tool-error.js";
 
 export function registerBirdTools(server: McpServer): void {
@@ -104,7 +104,7 @@ export function registerBirdTools(server: McpServer): void {
 
         if (action === "add") {
           if (!example) {
-            return { content: [{ type: "text", text: "The example parameter is required." }] };
+            return { content: [{ type: "text", text: "The example parameter is required." }], isError: true };
           }
           const added = await addExample(data_source_id, {
             question: example.question,
@@ -121,7 +121,7 @@ export function registerBirdTools(server: McpServer): void {
 
         if (action === "remove") {
           if (!example_id) {
-            return { content: [{ type: "text", text: "The example_id parameter is required." }] };
+            return { content: [{ type: "text", text: "The example_id parameter is required." }], isError: true };
           }
           const removed = await removeExample(data_source_id, example_id);
           return {
@@ -201,9 +201,17 @@ export function registerBirdTools(server: McpServer): void {
         )
         .optional()
         .describe("List of SQL to evaluate (required when action=run)"),
+      timeout_secs: z
+        .number()
+        .int()
+        .min(1)
+        .max(300)
+        .optional()
+        .default(30)
+        .describe("Per-query execution timeout in seconds when action=run (1 to 300, default 30)"),
     },
     {},
-    async ({ data_source_id, action, test_case, test_case_id, generated_sqls }) => {
+    async ({ data_source_id, action, test_case, test_case_id, generated_sqls, timeout_secs }) => {
       try {
         if (action === "list_tests") {
           const store = await loadTestSuite(data_source_id);
@@ -221,7 +229,7 @@ export function registerBirdTools(server: McpServer): void {
 
         if (action === "add_test") {
           if (!test_case) {
-            return { content: [{ type: "text", text: "The test_case parameter is required." }] };
+            return { content: [{ type: "text", text: "The test_case parameter is required." }], isError: true };
           }
           const added = await addTestCase(data_source_id, {
             question: test_case.question,
@@ -236,7 +244,7 @@ export function registerBirdTools(server: McpServer): void {
 
         if (action === "remove_test") {
           if (!test_case_id) {
-            return { content: [{ type: "text", text: "The test_case_id parameter is required." }] };
+            return { content: [{ type: "text", text: "The test_case_id parameter is required." }], isError: true };
           }
           const removed = await removeTestCase(data_source_id, test_case_id);
           return {
@@ -251,7 +259,7 @@ export function registerBirdTools(server: McpServer): void {
 
         if (action === "run") {
           if (!generated_sqls || generated_sqls.length === 0) {
-            return { content: [{ type: "text", text: "The generated_sqls parameter is required." }] };
+            return { content: [{ type: "text", text: "The generated_sqls parameter is required." }], isError: true };
           }
           const run = await runEvaluation(
             data_source_id,
@@ -259,6 +267,7 @@ export function registerBirdTools(server: McpServer): void {
               testCaseId: gs.test_case_id,
               generatedSql: gs.generated_sql,
             })),
+            timeout_secs,
           );
           return { content: [{ type: "text", text: formatEvalResults(run) }] };
         }
@@ -298,28 +307,18 @@ export function registerBirdTools(server: McpServer): void {
     async ({ data_source_id, action, mappings, keywords }) => {
       try {
         if (action === "list") {
-          const effective = await getEffectiveMap(data_source_id);
           const custom = await loadKeywordMap(data_source_id);
-          const defaultCount = Object.keys(DEFAULT_KEYWORD_MAP).length;
-          const customCount = Object.keys(custom).length;
+          const entries = Object.entries(custom);
 
           const lines = [
             `## Keyword Map (Data Source ${data_source_id})\n`,
-            `Default: ${defaultCount} | Custom: ${customCount} | Total: ${Object.keys(effective).length}\n`,
+            `${entries.length} mapping(s)\n`,
           ];
-
-          if (customCount > 0) {
-            lines.push("### Custom mappings:");
-            for (const [ko, en] of Object.entries(custom)) {
-              lines.push(`- **${ko}** → ${en.join(", ")}`);
-            }
-            lines.push("");
+          if (entries.length === 0) {
+            lines.push("No keyword mappings registered. Use action=add to register some.");
           }
-
-          lines.push("### All effective mappings:");
-          for (const [ko, en] of Object.entries(effective)) {
-            const isCustom = ko in custom;
-            lines.push(`- ${isCustom ? "**" : ""}${ko}${isCustom ? "** (custom)" : ""} → ${en.join(", ")}`);
+          for (const [keyword, tables] of entries) {
+            lines.push(`- **${keyword}** → ${tables.join(", ")}`);
           }
 
           return { content: [{ type: "text", text: lines.join("\n") }] };
@@ -327,7 +326,7 @@ export function registerBirdTools(server: McpServer): void {
 
         if (action === "add") {
           if (!mappings || Object.keys(mappings).length === 0) {
-            return { content: [{ type: "text", text: "The mappings parameter is required. e.g., {\"revenue\": [\"payment\"]}" }] };
+            return { content: [{ type: "text", text: "The mappings parameter is required. e.g., {\"revenue\": [\"payment\"]}" }], isError: true };
           }
           const updated = await addMappings(data_source_id, mappings);
           const added = Object.keys(mappings);
@@ -343,7 +342,7 @@ export function registerBirdTools(server: McpServer): void {
 
         if (action === "remove") {
           if (!keywords || keywords.length === 0) {
-            return { content: [{ type: "text", text: "The keywords parameter is required." }] };
+            return { content: [{ type: "text", text: "The keywords parameter is required." }], isError: true };
           }
           await removeMappings(data_source_id, keywords);
           return {
@@ -354,7 +353,7 @@ export function registerBirdTools(server: McpServer): void {
         if (action === "reset") {
           await resetMappings(data_source_id);
           return {
-            content: [{ type: "text", text: "Custom mappings have been reset. Only default mappings will be used." }],
+            content: [{ type: "text", text: "All keyword mappings have been reset." }],
           };
         }
 

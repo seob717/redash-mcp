@@ -5,7 +5,7 @@ import { pruneSchema, formatPrunedSchema, type SchemaTable } from "./schema-prun
 import { assessComplexity } from "./complexity.js";
 import { getEffectiveMap } from "./keyword-map.js";
 import { isLLMAvailable, selectTablesWithLLM } from "./llm-table-selector.js";
-import type { SmartQueryResponse } from "./types.js";
+import type { PrunedTable, SmartQueryResponse } from "./types.js";
 
 export async function handleSmartQuery(params: {
   question: string;
@@ -15,29 +15,25 @@ export async function handleSmartQuery(params: {
   const { question, data_source_id, context } = params;
   const config = await loadConfig();
 
-  let fullSchema: any[];
-  try {
-    fullSchema = await fetchSchema(data_source_id);
-  } catch (e: any) {
-    return { action: "explain", explanation: `Schema fetch failed: ${e.message}` };
+  // The schema fetch and the local JSON reads are independent — load them in parallel.
+  const [schemaResult, allExamples, keywordMap] = await Promise.all([
+    fetchSchema(data_source_id).then(
+      (schema) => ({ ok: true as const, schema }),
+      (e: any) => ({ ok: false as const, message: String(e?.message ?? e) }),
+    ),
+    config.bird.fewShot.enabled ? loadExamples(data_source_id) : Promise.resolve([]),
+    getEffectiveMap(data_source_id),
+  ]);
+  if (!schemaResult.ok) {
+    return { action: "explain", explanation: `Schema fetch failed: ${schemaResult.message}` };
   }
-  // Defensive: ensure columns are objects
-  for (const table of fullSchema) {
-    table.columns = (table.columns ?? []).map((c: any) =>
-      typeof c === "string" ? { name: c, type: "unknown" } : c
-    );
-  }
-
-  const allExamples = config.bird.fewShot.enabled
-    ? await loadExamples(data_source_id)
-    : [];
-
-  const keywordMap = await getEffectiveMap(data_source_id);
+  const fullSchema: SchemaTable[] = schemaResult.schema;
 
   const combinedQuestion = context ? `${question} ${context}` : question;
 
-  let prunedTables;
-  if (config.bird.schemaPruning.enabled) {
+  const scoringEnabled = config.bird.schemaPruning.enabled;
+  let prunedTables: PrunedTable[];
+  if (scoringEnabled) {
     prunedTables = pruneSchema(
       combinedQuestion,
       fullSchema,
@@ -46,35 +42,44 @@ export async function handleSmartQuery(params: {
       keywordMap,
     );
   } else {
-    prunedTables = fullSchema.slice(0, 10).map((t: any) => ({
+    prunedTables = fullSchema.slice(0, 10).map((t) => ({
       name: t.name,
-      columns: t.columns ?? [],
+      columns: t.columns,
       score: 0,
     }));
   }
 
   // LLM fallback: when token matching fails to find relevant tables
   const maxScore = Math.max(...prunedTables.map((t) => t.score), 0);
-  if (maxScore === 0 && isLLMAvailable()) {
+  if (scoringEnabled && maxScore === 0 && isLLMAvailable()) {
     const llmSelected = await selectTablesWithLLM(
       combinedQuestion,
       fullSchema,
       config.bird.schemaPruning.topK,
     );
     if (llmSelected.length > 0) {
-      const selectedSet = new Set(llmSelected);
+      // Preserve the LLM's ranking as descending scores; a uniform score
+      // would trip the "too many tables tied" vagueness check.
+      const rank = new Map(llmSelected.map((name, i) => [name, llmSelected.length - i]));
       prunedTables = fullSchema
-        .filter((t: SchemaTable) => selectedSet.has(t.name))
-        .map((t: SchemaTable) => ({
+        .filter((t) => rank.has(t.name))
+        .map((t) => ({
           name: t.name,
-          columns: t.columns ?? [],
-          score: 1,
+          columns: t.columns,
+          score: rank.get(t.name)!,
         }));
     }
   }
 
+  if (prunedTables.length === 0) {
+    return {
+      action: "explain",
+      explanation: "No tables were found in this data source's schema, so SQL cannot be generated. Verify the data source with list_tables.",
+    };
+  }
+
   if (!context) {
-    const clarifications = detectVagueness(question, prunedTables);
+    const clarifications = detectVagueness(question, prunedTables, scoringEnabled);
     if (clarifications.length > 0) {
       return {
         action: "clarify",
@@ -92,7 +97,7 @@ export async function handleSmartQuery(params: {
   );
 
   const complexity = config.bird.complexity.enabled
-    ? assessComplexity(context ? `${question} ${context}` : question, prunedTables)
+    ? assessComplexity(combinedQuestion, prunedTables)
     : undefined;
 
   const guidanceParts: string[] = [];
@@ -115,9 +120,10 @@ export async function handleSmartQuery(params: {
   };
 }
 
-function detectVagueness(
+export function detectVagueness(
   question: string,
   prunedTables: Array<{ name: string; score: number }>,
+  scored: boolean,
 ): string[] {
   const clarifications: string[] = [];
   const q = question.toLowerCase();
@@ -151,19 +157,22 @@ function detectVagueness(
     clarifications.push("Could you provide more details about what data you need?");
   }
 
-  const maxScore = Math.max(...prunedTables.map((t) => t.score), 0);
-  if (maxScore === 0 && prunedTables.length > 0) {
-    clarifications.push(
-      "I couldn't identify which tables are relevant. Could you mention specific entities (e.g., users, orders, payments)?",
-    );
-  }
-
-  if (maxScore > 0) {
-    const topTables = prunedTables.filter((t) => t.score === maxScore);
-    if (topTables.length > 3) {
+  // Score-based checks only make sense when table scoring actually ran.
+  if (scored) {
+    const maxScore = Math.max(...prunedTables.map((t) => t.score), 0);
+    if (maxScore === 0 && prunedTables.length > 0) {
       clarifications.push(
-        `Multiple tables match your question (${topTables.slice(0, 5).map((t) => t.name).join(", ")}). Could you be more specific about which data you need?`,
+        "I couldn't identify which tables are relevant. Could you mention specific entities (e.g., users, orders, payments)?",
       );
+    }
+
+    if (maxScore > 0) {
+      const topTables = prunedTables.filter((t) => t.score === maxScore);
+      if (topTables.length > 3) {
+        clarifications.push(
+          `Multiple tables match your question (${topTables.slice(0, 5).map((t) => t.name).join(", ")}). Could you be more specific about which data you need?`,
+        );
+      }
     }
   }
 
