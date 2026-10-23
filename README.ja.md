@@ -56,6 +56,7 @@ Redash MCP サーバーは複数あります。このサーバーは、LLM に *
 | 保存クエリ | `update_query` | クエリを更新 |
 | 保存クエリ | `fork_query` | クエリを複製 |
 | 保存クエリ | `archive_query` | クエリをアーカイブ（削除） |
+| 保存クエリ | `create_visualization` | 保存クエリにチャート（折れ線/棒/面/円/散布図）またはカウンターを作成 |
 | ダッシュボード | `list_dashboards` | ダッシュボード一覧を取得 |
 | ダッシュボード | `get_dashboard` | ダッシュボードの詳細とウィジェットを取得 |
 | ダッシュボード | `create_dashboard` | 新しいダッシュボードを作成 |
@@ -248,7 +249,7 @@ Claude に自然言語で依頼するだけです:
 1. `smart_query` → 売上関連のテーブルを解析
 2. `create_query` → 「月次売上推移」クエリを保存
 3. `create_dashboard` → 「売上ダッシュボード」を作成
-4. `get_query` → 保存したクエリの可視化 ID を取得
+4. `create_visualization` → 保存したクエリに折れ線チャートを作成
 5. `add_widget` → ダッシュボードにチャートウィジェットを追加
 
 **結果:**

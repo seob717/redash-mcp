@@ -54,6 +54,7 @@ There are several Redash MCP servers. This one is built for letting an LLM touch
 | Saved Queries | `update_query` | Update a saved query |
 | Saved Queries | `fork_query` | Fork a saved query |
 | Saved Queries | `archive_query` | Archive (delete) a query |
+| Saved Queries | `create_visualization` | Create a chart (line/column/area/pie/scatter) or counter on a saved query |
 | Dashboards | `list_dashboards` | List dashboards |
 | Dashboards | `get_dashboard` | Get dashboard details and widgets |
 | Dashboards | `create_dashboard` | Create a new dashboard |
@@ -246,7 +247,7 @@ Out of 1,204 new users last week, 312 made a purchase (25.9%).
 1. `smart_query` → Analyze revenue-related tables
 2. `create_query` → Save the "Monthly Revenue Trend" query
 3. `create_dashboard` → Create a "Revenue Dashboard"
-4. `get_query` → Get the visualization ID from the saved query
+4. `create_visualization` → Create a line chart on the saved query
 5. `add_widget` → Add the chart widget to the dashboard
 
 **Result:**

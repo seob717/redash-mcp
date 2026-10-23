@@ -56,6 +56,7 @@ Redash MCP 서버는 여러 개 있습니다. 이 서버는 LLM이 **운영(prod
 | 저장 쿼리 | `update_query` | 쿼리 수정 |
 | 저장 쿼리 | `fork_query` | 쿼리 복제 |
 | 저장 쿼리 | `archive_query` | 쿼리 삭제 (아카이브) |
+| 저장 쿼리 | `create_visualization` | 저장된 쿼리에 차트(라인/막대/영역/파이/산점도)나 숫자 카드 생성 |
 | 대시보드 | `list_dashboards` | 대시보드 목록 조회 |
 | 대시보드 | `get_dashboard` | 대시보드 상세 및 위젯 목록 조회 |
 | 대시보드 | `create_dashboard` | 새 대시보드 생성 |
@@ -248,7 +249,7 @@ Claude에게 자연어로 요청하면 됩니다:
 1. `smart_query` → 매출 관련 테이블 분석
 2. `create_query` → "월별 매출 추이" 쿼리 저장
 3. `create_dashboard` → "매출 대시보드" 생성
-4. `get_query` → 저장된 쿼리의 시각화 ID 확인
+4. `create_visualization` → 저장된 쿼리에 라인 차트 생성
 5. `add_widget` → 대시보드에 차트 위젯 추가
 
 **결과:**
