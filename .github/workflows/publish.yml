@@ -37,11 +37,17 @@ jobs:
       - name: Run tests
         run: npm test
 
+      # Skips an already-published version so a failed run can be re-run safely.
       - name: Publish to npm
-        run: npm publish
+        run: |
+          SPEC="$(node -p 'const p=require("./package.json"); p.name+"@"+p.version')"
+          npm view "$SPEC" version >/dev/null 2>&1 || npm publish
 
+      # npm takes a few minutes to expose a new version; the MCP Registry checks it exists.
       - name: Publish to MCP Registry
         run: |
+          SPEC="$(node -p 'const p=require("./package.json"); p.name+"@"+p.version')"
+          for i in $(seq 1 30); do npm view "$SPEC" version >/dev/null 2>&1 && break; sleep 20; done
           curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
           ./mcp-publisher login github-oidc
           ./mcp-publisher publish
