@@ -52,6 +52,13 @@ describe("fetchSchema", () => {
     const schema = await mod.fetchSchema(5);
     expect(schema[0].columns).toEqual([{ name: "a", type: "unknown" }]);
   });
+
+  it("shares one request between concurrent callers", async () => {
+    const { mod, fetchMock } = await loadClient([jsonResponse({ schema: [{ name: "t", columns: [] }] })]);
+    const [a, b] = await Promise.all([mod.fetchSchema(5), mod.fetchSchema(5)]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(a).toBe(b);
+  });
 });
 
 describe("executeSql", () => {
@@ -74,6 +81,16 @@ describe("RedashApiError", () => {
       expect(e).toBeInstanceOf(mod.RedashApiError);
       expect(e.status).toBe(404);
     }
+  });
+
+  it("keeps Redash's error reason from the response body", async () => {
+    const { mod } = await loadClient([
+      jsonResponse({ job: { status: 4, error: "Missing parameter value for: period" } }, 400, "BAD REQUEST"),
+    ]);
+    await expect(mod.redashFetch("/queries/1/results")).rejects.toMatchObject({
+      status: 400,
+      reason: "Missing parameter value for: period",
+    });
   });
 });
 

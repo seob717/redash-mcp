@@ -39,8 +39,10 @@ export class RedashApiError extends Error {
     public readonly status: number,
     statusText: string,
     hint = "",
+    /** Redash's own explanation from the error body, e.g. "Missing parameter value for: period". */
+    public readonly reason = "",
   ) {
-    super(`Redash API error: ${status} ${statusText}${hint}`);
+    super(`Redash API error: ${status} ${statusText}${hint}${reason ? ` — ${reason}` : ""}`);
     this.name = "RedashApiError";
   }
 }
@@ -72,7 +74,9 @@ export async function redashFetch(path: string, options?: RequestInit) {
     if (res.status === 401) hint = " (Check your REDASH_API_KEY)";
     else if (res.status === 403) hint = " (Access denied for this resource)";
     else if (res.status === 404) hint = " (Resource not found. Check the ID)";
-    throw new RedashApiError(res.status, res.statusText, hint);
+    const body = await res.json().catch(() => null);
+    const reason = body?.job?.error ?? body?.message ?? "";
+    throw new RedashApiError(res.status, res.statusText, hint, typeof reason === "string" ? reason : "");
   }
   if (res.status === 204 || res.headers.get("content-length") === "0") {
     return null;
@@ -169,6 +173,7 @@ export function formatQueryResult(
 const schemaCache = new Map<number, { schema: any[]; ts: number }>();
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const SCHEMA_CACHE_MAX_ENTRIES = 32;
+const schemaInflight = new Map<number, Promise<any[]>>();
 
 export async function fetchSchema(dataSourceId: number): Promise<any[]> {
   const cached = schemaCache.get(dataSourceId);
@@ -178,6 +183,16 @@ export async function fetchSchema(dataSourceId: number): Promise<any[]> {
     return cached.schema;
   }
   if (cached) schemaCache.delete(dataSourceId);
+  // Concurrent callers share one request instead of each hitting a slow schema endpoint.
+  let pending = schemaInflight.get(dataSourceId);
+  if (!pending) {
+    pending = loadSchema(dataSourceId).finally(() => schemaInflight.delete(dataSourceId));
+    schemaInflight.set(dataSourceId, pending);
+  }
+  return pending;
+}
+
+async function loadSchema(dataSourceId: number): Promise<any[]> {
   const result = await redashFetch(`/data_sources/${dataSourceId}/schema`);
   if (!result || !Array.isArray(result.schema)) {
     // e.g. a {job: ...} payload while Redash refreshes the schema — never

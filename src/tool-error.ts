@@ -21,6 +21,9 @@ export function handleToolError(toolName: string, error: unknown) {
       userMessage = "Access denied. You do not have permission for this resource.";
     } else if (error.status === 404) {
       userMessage = "The requested resource was not found. Please check the ID and try again.";
+    } else if (error.status === 400 && error.reason) {
+      // Redash's 400 reasons are validation messages meant for the caller (e.g. missing parameters).
+      userMessage = `Redash rejected the request: ${error.reason}`;
     } else {
       userMessage = "The Redash API returned an error. Please try again later.";
     }

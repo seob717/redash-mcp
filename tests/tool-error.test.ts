@@ -17,6 +17,11 @@ describe("handleToolError", () => {
     expect(r.content[0].text).toMatch(/not found/i);
   });
 
+  it("passes Redash's 400 reason through so the caller can fix the request", () => {
+    const r = handleToolError("t", new RedashApiError(400, "BAD REQUEST", "", "Missing parameter value for: period"));
+    expect(r.content[0].text).toContain("Missing parameter value for: period");
+  });
+
   it("does not misread digits in unrelated errors as HTTP statuses", () => {
     const r = handleToolError("t", new Error('column "x_401" does not exist'));
     expect(r.content[0].text).not.toMatch(/authentication/i);

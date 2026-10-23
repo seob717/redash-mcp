@@ -48,8 +48,8 @@ There are several Redash MCP servers. This one is built for letting an LLM touch
 | Smart Query | `manage_keyword_map` | Add/list keyword→table mappings |
 | Query | `run_query` | Execute SQL and return results |
 | Saved Queries | `list_queries` | List saved queries |
-| Saved Queries | `get_query` | Get query details (SQL, visualizations) |
-| Saved Queries | `get_query_result` | Run a saved query and get results |
+| Saved Queries | `get_query` | Get query details (SQL, parameters, visualizations) |
+| Saved Queries | `get_query_result` | Run a saved query (with parameter values) and get results |
 | Saved Queries | `create_query` | Save a new query |
 | Saved Queries | `update_query` | Update a saved query |
 | Saved Queries | `fork_query` | Fork a saved query |
