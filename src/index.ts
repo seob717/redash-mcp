@@ -10,6 +10,8 @@ import { getCached, setCached } from "./query-cache.js";
 import { REDASH_URL, REDASH_API_KEY, redashFetch, resolveQueryResult, executeSql, formatQueryResult, fetchSchema } from "./redash-client.js";
 import { registerBirdTools } from "./bird/tools.js";
 import { handleToolError } from "./tool-error.js";
+import { CHART_TYPES, buildVisualization } from "./visualization.js";
+import { nextWidgetPosition } from "./dashboard-layout.js";
 
 if (process.argv[2] === "setup") {
   const { main } = await import("./setup.js");
@@ -500,7 +502,7 @@ server.tool(
 
 server.tool(
   "create_dashboard",
-  "Create a new, empty dashboard. Behavior: creates the dashboard and returns its id, name, and slug. Usage: after creating it, populate it with charts using add_widget, passing visualization ids obtained from get_query. To list or inspect existing dashboards instead, use list_dashboards / get_dashboard.",
+  "Create a new, empty dashboard. Behavior: creates the dashboard and returns its id, name, and slug. Usage: after creating it, populate it with charts using add_widget, passing visualization ids obtained from get_query or create_visualization. To list or inspect existing dashboards instead, use list_dashboards / get_dashboard.",
   {
     name: z.string().describe("Display name for the new dashboard"),
   },
@@ -526,17 +528,70 @@ server.tool(
 );
 
 server.tool(
+  "create_visualization",
+  "Create a chart (line, column, area, pie, scatter) or counter on a saved query, so it can be shown in Redash and placed on a dashboard. Behavior: creates the visualization and returns its id. Usage: save the SQL with create_query first; column names must exactly match the query's result columns (run get_query_result to see them). Then call add_widget with the returned id to put the chart on a dashboard.",
+  {
+    query_id: z.number().int().nonnegative().describe("ID of the saved query to chart (from create_query/list_queries)"),
+    name: z.string().describe("Display name for the chart"),
+    type: z.enum(CHART_TYPES).describe("Chart type: line, column (bar), area, pie, scatter, or counter (a single big number)"),
+    x_column: z.string().optional().describe("Result column for the X axis (pie: slice labels). Not used for counter"),
+    y_columns: z.array(z.string()).min(1).describe("Result column(s) for the values. Counter uses the first column of the first row"),
+    series_column: z.string().optional().describe("Optional column that splits rows into separate series/lines (e.g. model_name)"),
+    stacked: z.boolean().optional().describe("Stack the series (column/area charts)"),
+    horizontal: z.boolean().optional().describe("Swap axes for horizontal bars"),
+  },
+  { destructiveHint: true },
+  async ({ query_id, name, ...spec }) => {
+    try {
+      const { type, options } = buildVisualization(spec);
+
+      // A misspelled column silently renders an empty chart, so check against the last result when there is one.
+      const query = await redashFetch(`/queries/${query_id}`);
+      if (query?.latest_query_data_id) {
+        const result = await redashFetch(`/query_results/${query.latest_query_data_id}`);
+        const available: string[] = (result?.query_result?.data?.columns ?? []).map((c: any) => c.name);
+        const wanted = [spec.x_column, ...spec.y_columns, spec.series_column].filter((c): c is string => !!c);
+        const missing = wanted.filter((c) => !available.includes(c));
+        if (available.length > 0 && missing.length > 0) {
+          return {
+            content: [{ type: "text", text: `Column(s) not in the query result: ${missing.join(", ")}. Available columns: ${available.join(", ")}` }],
+            isError: true,
+          };
+        }
+      }
+
+      const data = await redashFetch("/visualizations", {
+        method: "POST",
+        body: JSON.stringify({ query_id, name, type, options }),
+      });
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({ id: data.id, name: data.name, type: data.type, query_id }, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      return handleToolError("create_visualization", error);
+    }
+  }
+);
+
+server.tool(
   "add_widget",
-  "Add a saved query's visualization onto a dashboard as a widget. Behavior: places the widget and returns its id and dashboard_id. Usage: get the dashboard_id from list_dashboards or create_dashboard, and the visualization_id from get_query (each saved query exposes its visualizations). This is how you build up a dashboard after creating it.",
+  "Add a saved query's visualization onto a dashboard as a widget. Behavior: places the widget below the existing ones (half-width widgets pair up side by side) and returns its id and dashboard_id. Usage: get the dashboard_id from list_dashboards or create_dashboard, and the visualization_id from get_query (each saved query exposes its visualizations) or from create_visualization for a new chart. This is how you build up a dashboard after creating it.",
   {
     dashboard_id: z.number().describe("ID of the dashboard to add the widget to (from list_dashboards/create_dashboard)"),
-    visualization_id: z.number().describe("ID of the visualization to embed (from get_query's visualizations list)"),
+    visualization_id: z.number().describe("ID of the visualization to embed (from get_query's visualizations list or create_visualization)"),
     text: z.string().optional().default("").describe("Optional text/markdown caption shown on the widget"),
     width: z.union([z.literal(1), z.literal(2)]).optional().default(1).describe("Widget width: 1 = half row, 2 = full row (default 1)"),
   },
   { destructiveHint: true },
   async ({ dashboard_id, visualization_id, text, width }) => {
     try {
+      const dashboard = await redashFetch(`/dashboards/${dashboard_id}`);
+      const existing = (dashboard?.widgets ?? []).map((w: any) => w.options?.position ?? {});
       const data = await redashFetch("/widgets", {
         method: "POST",
         body: JSON.stringify({
@@ -544,7 +599,7 @@ server.tool(
           visualization_id,
           text,
           width,
-          options: {},
+          options: { position: nextWidgetPosition(existing, width) },
         }),
       });
       return {
