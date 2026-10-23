@@ -228,19 +228,28 @@ server.tool(
 
 server.tool(
   "get_query_result",
-  "Run an existing saved query by its ID and return the latest results. Behavior: executes the query as stored in Redash and returns up to max_rows rows as a markdown table or JSON, with the column list and a truncation note. Usage: find the query_id with list_queries or get_query. Unlike run_query, this executes already-saved SQL rather than ad-hoc SQL, so the safety guard does not apply.",
+  "Run an existing saved query by its ID and return the latest results. Behavior: executes the query as stored in Redash and returns up to max_rows rows as a markdown table or JSON, with the column list and a truncation note. Usage: find the query_id with list_queries or get_query. If the query has parameters ({{ name }} placeholders), call get_query first to see their names, types, and allowed values, then pass every one in `parameters` — Redash does not fill in defaults for API calls. Unlike run_query, this executes already-saved SQL rather than ad-hoc SQL, so the safety guard does not apply.",
   {
     query_id: z.number().int().nonnegative().describe("ID of the saved query to run (from list_queries)"),
+    parameters: z.record(
+      z.string(),
+      z.union([
+        z.string(),
+        z.number(),
+        z.array(z.union([z.string(), z.number()])),
+        z.object({ start: z.string(), end: z.string() }),
+      ]),
+    ).optional().describe("Values for the query's parameters, keyed by parameter name (from get_query). Text/date: string; number: number; multi-select dropdown: array; date range: {start, end} (e.g. {\"start\": \"2026-10-01\", \"end\": \"2026-10-15\"})"),
     max_rows: z.number().int().min(1).max(MAX_ROWS_LIMIT).optional().default(100).describe(`Max rows to return (1 to ${MAX_ROWS_LIMIT}, default 100)`),
     format: z.enum(["table", "json"]).optional().default("table").describe("Output format: table (markdown) or json"),
     timeout_secs: z.number().int().min(1).max(MAX_TIMEOUT_SECS).optional().default(30).describe(`Query execution timeout in seconds (1 to ${MAX_TIMEOUT_SECS}, default 30)`),
   },
   { readOnlyHint: true },
-  async ({ query_id, max_rows, format, timeout_secs }) => {
+  async ({ query_id, parameters, max_rows, format, timeout_secs }) => {
     try {
       const res = await redashFetch(`/queries/${query_id}/results`, {
         method: "POST",
-        body: JSON.stringify({}),
+        body: JSON.stringify(parameters ? { parameters } : {}),
       });
 
       const { columns, rows } = await resolveQueryResult(res, timeout_secs);
@@ -261,7 +270,7 @@ server.tool(
 
 server.tool(
   "get_query",
-  "Get the full definition of a saved query. Behavior: returns the query's SQL text, data_source_id, tags, owner, update time, and its visualizations (each with id, name, type). Usage: find the query_id with list_queries. The returned visualization ids can be placed on a dashboard with add_widget; to actually run the query use get_query_result.",
+  "Get the full definition of a saved query. Behavior: returns the query's SQL text, data_source_id, tags, owner, update time, its parameters (name, type, default value, dropdown options), and its visualizations (each with id, name, type). Usage: find the query_id with list_queries. The returned visualization ids can be placed on a dashboard with add_widget; to actually run the query use get_query_result.",
   {
     query_id: z.number().describe("ID of the saved query to inspect (from list_queries)"),
   },
@@ -276,6 +285,17 @@ server.tool(
         query: data.query,
         data_source_id: data.data_source_id,
         tags: data.tags,
+        parameters: Array.isArray(data.options?.parameters)
+          ? data.options.parameters.map((p: any) => ({
+              name: p.name,
+              title: p.title,
+              type: p.type,
+              default: p.value,
+              ...(p.enumOptions ? { options: String(p.enumOptions).split("\n").filter(Boolean) } : {}),
+              ...(p.queryId ? { options_from_query_id: p.queryId } : {}),
+              ...(p.multiValuesOptions ? { multi_select: true } : {}),
+            }))
+          : [],
         visualizations_count: Array.isArray(data.visualizations) ? data.visualizations.length : 0,
         visualizations: Array.isArray(data.visualizations)
           ? data.visualizations.map((v: any) => ({ id: v.id, name: v.name, type: v.type }))

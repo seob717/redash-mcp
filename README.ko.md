@@ -50,8 +50,8 @@ Redash MCP 서버는 여러 개 있습니다. 이 서버는 LLM이 **운영(prod
 | 스마트 쿼리 | `manage_keyword_map` | 키워드→테이블 매핑 추가/조회 |
 | 쿼리 실행 | `run_query` | SQL 직접 실행 후 결과 반환 |
 | 저장 쿼리 | `list_queries` | 저장된 쿼리 목록 조회 |
-| 저장 쿼리 | `get_query` | 쿼리 상세 정보 (SQL, 시각화 등) 조회 |
-| 저장 쿼리 | `get_query_result` | 저장된 쿼리 실행 결과 조회 |
+| 저장 쿼리 | `get_query` | 쿼리 상세 정보 (SQL, 파라미터, 시각화 등) 조회 |
+| 저장 쿼리 | `get_query_result` | 저장된 쿼리를 실행해 결과 조회 (파라미터 값 지정 가능) |
 | 저장 쿼리 | `create_query` | 새 쿼리 저장 |
 | 저장 쿼리 | `update_query` | 쿼리 수정 |
 | 저장 쿼리 | `fork_query` | 쿼리 복제 |
