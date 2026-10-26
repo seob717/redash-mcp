@@ -21,7 +21,7 @@ Prepared answers for the [Anthropic Connectors Directory form](https://forms.gle
 
 ## Short Description (1-2 sentences)
 
-MCP server that connects Redash to Claude AI -- query data, manage dashboards, and run SQL with natural language. Supports 24 tools covering data sources, schema exploration, saved queries, dashboards, alerts, and BIRD SQL methodology for intelligent query generation.
+MCP server that connects Redash to Claude AI -- query data, manage dashboards, and run SQL with natural language. Supports 25 tools covering data sources, schema exploration, saved queries, dashboards, alerts, and BIRD SQL methodology for intelligent query generation.
 
 ---
 
