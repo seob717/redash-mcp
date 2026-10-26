@@ -19,7 +19,7 @@
 
 ## 3.5 の新機能
 
-- **`create_visualization`** — 保存クエリに折れ線 / 棒 / 面 / 円 / 散布図チャート、またはカウンターを作成します。カラム名を最新の結果と照合するため、タイプミスは空のチャートではなくエラーになります。
+- **`create_visualization`** — 保存クエリに折れ線 / 棒 / 面 / 円 / 散布図チャート、またはカウンターを作成します。クエリを実行済みであればカラム名を最新の結果と照合するため、タイプミスは空のチャートではなくエラーになります。
 - **ダッシュボードの自動配置** — `add_widget` が新しいウィジェットを既存ウィジェットの下に配置し、半幅ウィジェットは 2 つずつ横に並べます（以前はすべて左上に重なっていました）。
 
 全履歴: [Releases](https://github.com/seob717/redash-mcp/releases)
@@ -53,8 +53,8 @@ curl -fsSL https://raw.githubusercontent.com/seob717/redash-mcp/main/install.sh 
 <details>
 <summary><b>手動セットアップ</b></summary>
 
-**Claude Desktop** — `~/Library/Application Support/Claude/claude_desktop_config.json`
-**Cursor** — `~/.cursor/mcp.json`
+- **Claude Desktop** — `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Cursor** — `~/.cursor/mcp.json`（なければ作成）
 
 ```json
 {
@@ -116,7 +116,9 @@ codex mcp add redash-mcp \
 
 ### SQL セーフティガード
 
-- **常にブロック**: `DROP`、`TRUNCATE`、`ALTER TABLE`、`GRANT/REVOKE`、`WHERE` なしの `DELETE/UPDATE`
+`run_query` で実行する SQL に適用されます。`get_query_result` で実行する保存クエリはチェックされないため、Redash のデータソースには読み取り専用の DB アカウントを使ってください。
+
+- **常にブロック**（`REDASH_SAFETY_MODE=off` を除く）: `DROP`、`TRUNCATE`、`ALTER TABLE`、`GRANT/REVOKE`、`WHERE` なしの `DELETE/UPDATE`
 - **警告（`warn`）/ ブロック（`strict`）**: `SELECT *`、`WHERE`・`LIMIT` のないクエリ、PII カラムへのアクセス
 - **自動 LIMIT**: `REDASH_AUTO_LIMIT` 設定時に `LIMIT N` を追加
 
@@ -151,9 +153,10 @@ codex mcp add redash-mcp \
 **ダッシュボードを作る:** 「月次売上のクエリを保存して折れ線チャートにし、新しい売上ダッシュボードに載せて」
 
 1. `create_query` — 「月次売上」を保存
-2. `create_visualization` — `type: "line"`、`x_column: "month"`、`y_columns: ["revenue"]`
-3. `create_dashboard` — 「売上」ダッシュボードを作成
-4. `add_widget` — チャートを配置。ウィジェットを追加すると下に積まれるか、2 つずつ横に並びます
+2. `get_query_result` — 一度実行してチャートのカラムをチェックできるようにする
+3. `create_visualization` — `type: "line"`、`x_column: "month"`、`y_columns: ["revenue"]`
+4. `create_dashboard` — 「売上」ダッシュボードを作成
+5. `add_widget` — チャートを配置。ウィジェットを追加すると下に積まれるか、2 つずつ横に並びます
 
 ## トラブルシューティング
 
@@ -162,7 +165,7 @@ codex mcp add redash-mcp \
 | `npx` が見つからない（macOS の GUI アプリ） | `which npx` でフルパスを確認し、`command` に指定してください |
 | "Authentication failed" | `REDASH_API_KEY` がユーザー API キーか確認してください |
 | "Unable to connect to the Redash server" | `REDASH_URL`（`https://` を含み、`/api` は含めない）とネットワーク・VPN を確認してください |
-| "The query timed out" | クエリを単純化するか、`run_query` に大きめの `timeout_secs` を渡してください。API 応答が遅い場合は `REDASH_HTTP_TIMEOUT_SECS` を増やしてください |
+| "The query timed out" | クエリを単純化するか、`run_query` / `get_query_result` に大きめの `timeout_secs` を渡してください。API 応答が遅い場合は `REDASH_HTTP_TIMEOUT_SECS` を増やしてください |
 | セーフティガードにブロックされる | `WHERE`/`LIMIT` を追加してください。`strict` モードなら `REDASH_SAFETY_MODE=warn` にすると警告のみになります |
 | ツールが表示されない | 設定変更後、クライアントを完全に再起動してください |
 
@@ -184,7 +187,7 @@ redash-mcp は **ローカル MCP サーバー** であり、ユーザーの Red
 | **Redash API Key** | ローカルの環境変数 (`REDASH_API_KEY`) としてのみ保存。外部送信なし。 |
 | **クエリ内容と結果** | MCP プロトコルを通じてローカルの MCP クライアントにのみ配信。 |
 | **BIRD SQL 設定** | ローカルファイル (`~/.redash-mcp/`) にのみ保存。few-shot 例、キーワードマップ、フィードバック。 |
-| **LLM Fallback** | `ANTHROPIC_API_KEY` を設定した場合のみ、テーブル名のリストを Anthropic API に送信。クエリデータと結果は送信されません。 |
+| **LLM Fallback** | `ANTHROPIC_API_KEY` を設定した場合のみ、`smart_query` がテーブル名・カラム名と質問テキストを Anthropic API に送信。クエリ結果と行データは送信されません。 |
 
 ユーザーデータを第三者に販売・共有することはありません。
 

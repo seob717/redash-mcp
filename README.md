@@ -17,7 +17,7 @@ English | [한국어](README.ko.md) | [日本語](README.ja.md)
 
 ## What's new in 3.5
 
-- **`create_visualization`** — create line / column / area / pie / scatter charts or counters on a saved query. Column names are checked against the latest result, so a typo returns an error instead of an empty chart.
+- **`create_visualization`** — create line / column / area / pie / scatter charts or counters on a saved query. If the query has been run, column names are checked against its latest result, so a typo returns an error instead of an empty chart.
 - **Dashboard auto-layout** — `add_widget` places new widgets below existing ones; half-width widgets pair up side by side (previously they all overlapped at the top-left).
 
 Full history: [Releases](https://github.com/seob717/redash-mcp/releases)
@@ -51,8 +51,8 @@ curl -fsSL https://raw.githubusercontent.com/seob717/redash-mcp/main/install.sh 
 <details>
 <summary><b>Manual setup</b></summary>
 
-**Claude Desktop** — `~/Library/Application Support/Claude/claude_desktop_config.json`
-**Cursor** — `~/.cursor/mcp.json`
+- **Claude Desktop** — `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Cursor** — `~/.cursor/mcp.json` (create it if missing)
 
 ```json
 {
@@ -114,7 +114,9 @@ codex mcp add redash-mcp \
 
 ### SQL Safety Guard
 
-- **Always blocked**: `DROP`, `TRUNCATE`, `ALTER TABLE`, `GRANT/REVOKE`, `DELETE/UPDATE` without `WHERE`
+Applies to ad-hoc SQL run through `run_query`. Saved queries executed with `get_query_result` are not checked, so give the Redash data source a read-only DB account.
+
+- **Always blocked** (unless `REDASH_SAFETY_MODE=off`): `DROP`, `TRUNCATE`, `ALTER TABLE`, `GRANT/REVOKE`, `DELETE/UPDATE` without `WHERE`
 - **Warned (`warn`) / blocked (`strict`)**: `SELECT *`, queries without `WHERE` or `LIMIT`, PII column access
 - **Auto-LIMIT**: appends `LIMIT N` when `REDASH_AUTO_LIMIT` is set
 
@@ -132,7 +134,7 @@ Details: [docs/sql-safety-guard.md](docs/sql-safety-guard.md). Query results are
 | `REDASH_AUTO_LIMIT` | `0` | Auto-append `LIMIT N` to queries without one (0 = off) |
 | `REDASH_DEFAULT_MAX_AGE` | `0` | Redash cache TTL in seconds |
 | `REDASH_MCP_CACHE_TTL` | `300` | MCP query cache TTL in seconds (0 = off) |
-| `REDASH_MCP_CACHE_MAX_MB` | `50` | Max memory for the MCP query cache |
+| `REDASH_MCP_CACHE_MAX_MB` | `50` | Max memory for the MCP query cache, in MB |
 | `REDASH_MCP_CONFIG_DIR` | `~/.redash-mcp` | Where BIRD few-shot, feedback, eval, and keyword-map data live |
 | `REDASH_BIRD_ENABLED` | `true` | `false` disables the BIRD smart query tools |
 | `REDASH_HTTP_TIMEOUT_SECS` | `30` | Per-request HTTP timeout against the Redash API |
@@ -149,9 +151,10 @@ Just ask in natural language:
 **Build a dashboard:** "Save a monthly revenue query, chart it as a line, and put it on a new Revenue dashboard."
 
 1. `create_query` — save "Monthly Revenue"
-2. `create_visualization` — `type: "line"`, `x_column: "month"`, `y_columns: ["revenue"]`
-3. `create_dashboard` — create "Revenue"
-4. `add_widget` — place the chart; more widgets stack below or pair side by side
+2. `get_query_result` — run it once so the chart columns can be checked
+3. `create_visualization` — `type: "line"`, `x_column: "month"`, `y_columns: ["revenue"]`
+4. `create_dashboard` — create "Revenue"
+5. `add_widget` — place the chart; more widgets stack below or pair side by side
 
 ## Troubleshooting
 
@@ -160,7 +163,7 @@ Just ask in natural language:
 | `npx` not found (macOS GUI apps) | Run `which npx` and use the full path as `command` |
 | "Authentication failed" | Check `REDASH_API_KEY` — it must be a user API key |
 | "Unable to connect to the Redash server" | Check `REDASH_URL` (base URL with `https://`, without `/api`) and network/VPN |
-| "The query timed out" | Simplify the query or pass a larger `timeout_secs` to `run_query`; raise `REDASH_HTTP_TIMEOUT_SECS` for slow API responses |
+| "The query timed out" | Simplify the query or pass a larger `timeout_secs` to `run_query` / `get_query_result`; raise `REDASH_HTTP_TIMEOUT_SECS` for slow API responses |
 | Query blocked by the safety guard | Add `WHERE`/`LIMIT`; in `strict` mode, switch to `REDASH_SAFETY_MODE=warn` to get warnings instead |
 | Tools don't show up | Fully restart the client after editing its config |
 
@@ -182,7 +185,7 @@ redash-mcp is a **local MCP server** that talks directly to your Redash instance
 | **Redash API Key** | Stored only as a local environment variable (`REDASH_API_KEY`). Never transmitted externally. |
 | **Query content & results** | Delivered only to the local MCP client via the MCP protocol. |
 | **BIRD SQL settings** | Stored only in local files (`~/.redash-mcp/`): few-shot examples, keyword maps, and feedback. |
-| **LLM Fallback** | Only when `ANTHROPIC_API_KEY` is set, table name lists are sent to the Anthropic API. Query data and results are never transmitted. |
+| **LLM Fallback** | Only when `ANTHROPIC_API_KEY` is set, `smart_query` sends table names, column names, and the question text to the Anthropic API. Query results and row data are never transmitted. |
 
 We do not sell or share user data with third parties.
 

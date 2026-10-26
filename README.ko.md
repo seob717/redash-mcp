@@ -19,7 +19,7 @@
 
 ## 3.5 새 기능
 
-- **`create_visualization`** — 저장된 쿼리에 라인 / 막대 / 영역 / 파이 / 산점도 차트나 숫자 카드(counter)를 만듭니다. 컬럼명을 최신 결과와 대조하므로, 오타가 있으면 빈 차트 대신 오류를 돌려줍니다.
+- **`create_visualization`** — 저장된 쿼리에 라인 / 막대 / 영역 / 파이 / 산점도 차트나 숫자 카드(counter)를 만듭니다. 쿼리를 실행한 적이 있으면 컬럼명을 최신 결과와 대조하므로, 오타가 있을 때 빈 차트 대신 오류를 돌려줍니다.
 - **대시보드 자동 배치** — `add_widget`이 새 위젯을 기존 위젯 아래에 놓고, 반폭 위젯은 두 개씩 나란히 배치합니다(이전에는 모두 왼쪽 위에 겹쳐 놓였습니다).
 
 전체 변경 이력: [Releases](https://github.com/seob717/redash-mcp/releases)
@@ -53,8 +53,8 @@ curl -fsSL https://raw.githubusercontent.com/seob717/redash-mcp/main/install.sh 
 <details>
 <summary><b>수동 설치</b></summary>
 
-**Claude Desktop** — `~/Library/Application Support/Claude/claude_desktop_config.json`
-**Cursor** — `~/.cursor/mcp.json`
+- **Claude Desktop** — `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Cursor** — `~/.cursor/mcp.json` (없으면 생성)
 
 ```json
 {
@@ -116,7 +116,9 @@ codex mcp add redash-mcp \
 
 ### SQL 안전 가드
 
-- **항상 차단**: `DROP`, `TRUNCATE`, `ALTER TABLE`, `GRANT/REVOKE`, `WHERE` 없는 `DELETE/UPDATE`
+`run_query`로 실행하는 SQL에 적용됩니다. `get_query_result`로 실행하는 저장 쿼리는 검사하지 않으니, Redash 데이터소스에는 읽기 전용 DB 계정을 쓰세요.
+
+- **항상 차단** (`REDASH_SAFETY_MODE=off` 제외): `DROP`, `TRUNCATE`, `ALTER TABLE`, `GRANT/REVOKE`, `WHERE` 없는 `DELETE/UPDATE`
 - **경고(`warn`) / 차단(`strict`)**: `SELECT *`, `WHERE`·`LIMIT` 없는 쿼리, PII 컬럼 접근
 - **자동 LIMIT**: `REDASH_AUTO_LIMIT` 설정 시 `LIMIT N` 추가
 
@@ -151,9 +153,10 @@ codex mcp add redash-mcp \
 **대시보드 만들기:** "월별 매출 쿼리를 저장하고, 라인 차트로 만들어서 새 매출 대시보드에 올려줘"
 
 1. `create_query` — "월별 매출" 저장
-2. `create_visualization` — `type: "line"`, `x_column: "month"`, `y_columns: ["revenue"]`
-3. `create_dashboard` — "매출" 대시보드 생성
-4. `add_widget` — 차트 배치. 위젯을 더 추가하면 아래로 쌓이거나 두 개씩 나란히 놓입니다
+2. `get_query_result` — 한 번 실행해 차트 컬럼을 검사할 수 있게 함
+3. `create_visualization` — `type: "line"`, `x_column: "month"`, `y_columns: ["revenue"]`
+4. `create_dashboard` — "매출" 대시보드 생성
+5. `add_widget` — 차트 배치. 위젯을 더 추가하면 아래로 쌓이거나 두 개씩 나란히 놓입니다
 
 ## 문제 해결
 
@@ -162,7 +165,7 @@ codex mcp add redash-mcp \
 | `npx`를 못 찾음 (macOS GUI 앱) | `which npx`로 전체 경로를 확인해 `command`에 넣으세요 |
 | "Authentication failed" | `REDASH_API_KEY`가 사용자 API 키인지 확인하세요 |
 | "Unable to connect to the Redash server" | `REDASH_URL`(`https://` 포함, `/api` 제외)과 네트워크·VPN을 확인하세요 |
-| "The query timed out" | 쿼리를 단순화하거나 `run_query`에 더 큰 `timeout_secs`를 넘기세요. API 응답이 느리면 `REDASH_HTTP_TIMEOUT_SECS`를 늘리세요 |
+| "The query timed out" | 쿼리를 단순화하거나 `run_query` / `get_query_result`에 더 큰 `timeout_secs`를 넘기세요. API 응답이 느리면 `REDASH_HTTP_TIMEOUT_SECS`를 늘리세요 |
 | 안전 가드가 쿼리를 차단함 | `WHERE`/`LIMIT`을 추가하세요. `strict` 모드라면 `REDASH_SAFETY_MODE=warn`으로 바꾸면 경고만 표시됩니다 |
 | 툴이 보이지 않음 | 설정을 바꾼 뒤 클라이언트를 완전히 재시작하세요 |
 
@@ -184,7 +187,7 @@ redash-mcp는 **로컬 MCP 서버**로, 사용자의 Redash 인스턴스와 직�
 | **Redash API Key** | 로컬 환경변수(`REDASH_API_KEY`)로만 저장. 외부 전송 없음 |
 | **쿼리 내용 및 결과** | MCP 프로토콜을 통해 로컬 MCP 클라이언트에만 전달 |
 | **BIRD SQL 설정** | 로컬 파일(`~/.redash-mcp/`)에만 저장. few-shot 예제, 키워드 맵, 피드백 |
-| **LLM Fallback** | `ANTHROPIC_API_KEY`를 설정한 경우에만 테이블명 목록을 Anthropic API로 전송. 쿼리 데이터·결과는 전송하지 않음 |
+| **LLM Fallback** | `ANTHROPIC_API_KEY`를 설정한 경우에만 `smart_query`가 테이블명·컬럼명과 질문 텍스트를 Anthropic API로 전송. 쿼리 결과·행 데이터는 전송하지 않음 |
 
 사용자 데이터를 제3자에게 판매하거나 공유하지 않습니다.
 
