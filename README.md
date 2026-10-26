@@ -11,102 +11,48 @@
 
 English | [한국어](README.ko.md) | [日本語](README.ja.md)
 
-> MCP server that connects [Redash](https://redash.io) to Claude, Cursor, Gemini CLI, Codex, and any MCP client — query data, manage dashboards, and run SQL with natural language.
+> MCP server that connects [Redash](https://redash.io) to Claude, Cursor, Gemini CLI, Codex, and any MCP client — query data, build charts and dashboards, and run SQL with natural language.
 
-[Why](#why-redash-mcp) · [Features](#features) · [Install](#installation) · [Env](#environment-variables) · [Examples](#usage-examples) · [Privacy](#privacy-policy)
+[Install](#installation) · [Tools](#tools) · [Env](#environment-variables) · [Examples](#usage-examples) · [Troubleshooting](#troubleshooting) · [Privacy](#privacy-policy)
 
-![redash-mcp demo — Claude explores Redash tables, charts revenue by category, then the SQL safety guard blocks a PII export](docs/demo.gif)
+## What's new in 3.5
 
----
+- **`create_visualization`** — create line / column / area / pie / scatter charts or counters on a saved query. Column names are checked against the latest result, so a typo returns an error instead of an empty chart.
+- **Dashboard auto-layout** — `add_widget` places new widgets below existing ones; half-width widgets pair up side by side (previously they all overlapped at the top-left).
+
+Full history: [Releases](https://github.com/seob717/redash-mcp/releases)
 
 ## Why redash-mcp?
 
-There are several Redash MCP servers. This one is built for letting an LLM touch **production** data safely:
+Built for letting an LLM touch **production** data safely:
 
-- **🛡️ SQL Safety Guard** — blocks `DROP`/`TRUNCATE`/`ALTER` and `DELETE`/`UPDATE` without `WHERE`; `strict`/`warn`/`off` modes, PII detection, and auto-`LIMIT`. Hand Claude your real Redash without flinching.
-- **🧠 BIRD Smart Query** — analyzes the question, auto-selects the right tables, and guides SQL generation (based on the [BIRD text-to-SQL](https://bird-bench.github.io/) methodology). Optional Claude Haiku fallback for table selection.
-- **⚡ One-command setup** — `npx redash-mcp setup` configures Claude Desktop / Claude Code / Cursor / Gemini CLI / Codex CLI for you. No hand-editing JSON.
-- **🔒 Fully local** — talks directly to your Redash instance. API key and query results never leave your machine.
-- **📊 End-to-end** — query, save, fork, dashboards, widgets, and alerts — 20+ tools across 6 categories.
-
----
-
-## Features
-
-### Tools
-
-| Category | Tool | Description |
-|---|---|---|
-| Data Sources | `list_data_sources` | List connected data sources |
-| Schema | `list_tables` | List tables (supports keyword search) |
-| Schema | `get_table_columns` | Get column names and types |
-| Smart Query | `smart_query` | Analyze a question, auto-select tables, guide SQL generation (BIRD) |
-| Smart Query | `get_bird_config` | Inspect the active BIRD smart-query configuration |
-| Smart Query | `evaluate_queries` | Evaluate generated SQL against expected results |
-| Smart Query | `submit_query_feedback` | Record feedback to improve future table selection |
-| Smart Query | `manage_few_shot_examples` | Add/list BIRD few-shot examples |
-| Smart Query | `manage_keyword_map` | Add/list keyword→table mappings |
-| Query | `run_query` | Execute SQL and return results |
-| Saved Queries | `list_queries` | List saved queries |
-| Saved Queries | `get_query` | Get query details (SQL, parameters, visualizations) |
-| Saved Queries | `get_query_result` | Run a saved query (with parameter values) and get results |
-| Saved Queries | `create_query` | Save a new query |
-| Saved Queries | `update_query` | Update a saved query |
-| Saved Queries | `fork_query` | Fork a saved query |
-| Saved Queries | `archive_query` | Archive (delete) a query |
-| Saved Queries | `create_visualization` | Create a chart (line/column/area/pie/scatter) or counter on a saved query |
-| Dashboards | `list_dashboards` | List dashboards |
-| Dashboards | `get_dashboard` | Get dashboard details and widgets |
-| Dashboards | `create_dashboard` | Create a new dashboard |
-| Dashboards | `add_widget` | Add a visualization widget to a dashboard |
-| Alerts | `list_alerts` | List alerts |
-| Alerts | `get_alert` | Get alert details |
-| Alerts | `create_alert` | Create a new alert |
-
-### SQL Safety Guard
-
-Protects your database from dangerous queries:
-
-- **Blocked always**: `DROP`, `TRUNCATE`, `ALTER TABLE`, `GRANT/REVOKE`, `DELETE/UPDATE` without `WHERE`
-- **Warned (warn mode)** / **Blocked (strict mode)**: `SELECT *`, queries without `WHERE` or `LIMIT`, PII column access
-- **Auto-LIMIT**: Automatically appends `LIMIT N` when `REDASH_AUTO_LIMIT` is set
-
-### Query Cache
-
-Results are cached in-memory to reduce redundant API calls:
-
-- TTL: configurable via `REDASH_MCP_CACHE_TTL` (default: 300s)
-- Max memory: configurable via `REDASH_MCP_CACHE_MAX_MB` (default: 50MB)
-
----
+- **🛡️ SQL Safety Guard** — blocks `DROP`/`TRUNCATE`/`ALTER` and `DELETE`/`UPDATE` without `WHERE`; `strict`/`warn`/`off` modes, PII detection, and auto-`LIMIT`.
+- **🧠 BIRD Smart Query** — analyzes the question, auto-selects tables, and guides SQL generation ([BIRD text-to-SQL](https://bird-bench.github.io/)). Optional Claude Haiku fallback.
+- **📊 End-to-end** — query, save, chart, dashboards, and alerts — 25 tools.
+- **⚡ One-command setup** — `npx redash-mcp setup` configures Claude Desktop / Claude Code / Cursor / Gemini CLI / Codex CLI.
+- **🔒 Fully local** — talks directly to your Redash. API key and results never leave your machine.
 
 ## Installation
 
-### Auto Setup (Recommended)
+**Requirements:** Node.js 20+ and a Redash API key (Redash → Profile → **Edit Profile** → **API Key**).
 
 ```bash
 npx redash-mcp setup
 ```
 
-The setup wizard will guide you through configuring Claude Desktop, Claude Code (CLI), Cursor, Gemini CLI, and Codex CLI — pick any combination.
+The wizard configures any combination of Claude Desktop, Claude Code, Cursor, Gemini CLI, and Codex CLI.
 
-### Shell Script Install
-
-Installs Node.js, Claude Desktop, and MCP config all at once:
+Alternatively, install Node.js, Claude Desktop, and the MCP config in one go:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/seob717/redash-mcp/main/install.sh | bash
 ```
 
-### Manual Setup
+<details>
+<summary><b>Manual setup</b></summary>
 
-#### 1. Get your Redash API Key
-
-Go to Redash → Profile (top right) → **Edit Profile** → Copy **API Key**
-
-#### 2-A. Claude Desktop
-
-Open `~/Library/Application Support/Claude/claude_desktop_config.json` and add:
+**Claude Desktop** — `~/Library/Application Support/Claude/claude_desktop_config.json`
+**Cursor** — `~/.cursor/mcp.json`
 
 ```json
 {
@@ -125,7 +71,7 @@ Open `~/Library/Application Support/Claude/claude_desktop_config.json` and add:
 
 Fully quit and restart Claude Desktop after saving.
 
-#### 2-B. Claude Code (CLI)
+**Claude Code**
 
 ```bash
 claude mcp add --scope user redash-mcp \
@@ -134,26 +80,7 @@ claude mcp add --scope user redash-mcp \
   -- npx -y redash-mcp
 ```
 
-#### 2-C. Cursor
-
-Open `~/.cursor/mcp.json` (create it if missing) and add:
-
-```json
-{
-  "mcpServers": {
-    "redash-mcp": {
-      "command": "npx",
-      "args": ["-y", "redash-mcp"],
-      "env": {
-        "REDASH_URL": "https://your-redash-instance.com",
-        "REDASH_API_KEY": "your_api_key_here"
-      }
-    }
-  }
-}
-```
-
-#### 2-D. Gemini CLI
+**Gemini CLI**
 
 ```bash
 gemini mcp add -s user \
@@ -162,7 +89,7 @@ gemini mcp add -s user \
   redash-mcp npx -y redash-mcp
 ```
 
-#### 2-E. Codex CLI
+**Codex CLI**
 
 ```bash
 codex mcp add redash-mcp \
@@ -171,121 +98,97 @@ codex mcp add redash-mcp \
   -- npx -y redash-mcp
 ```
 
-> **macOS**: If `npx` is not found, run `which npx` to get the full path and use that instead.
+</details>
 
----
+## Tools
+
+| Category | Tools |
+|---|---|
+| Data sources & schema | `list_data_sources`, `list_tables`, `get_table_columns` |
+| Query | `run_query` — execute SQL and return results |
+| Saved queries | `list_queries`, `get_query`, `get_query_result` (with parameter values), `create_query`, `update_query`, `fork_query`, `archive_query` |
+| Charts | `create_visualization` — line / column / area / pie / scatter / counter |
+| Dashboards | `list_dashboards`, `get_dashboard`, `create_dashboard`, `add_widget` (auto-layout) |
+| Alerts | `list_alerts`, `get_alert`, `create_alert` |
+| Smart Query (BIRD) | `smart_query`, `get_bird_config`, `evaluate_queries`, `submit_query_feedback`, `manage_few_shot_examples`, `manage_keyword_map` |
+
+### SQL Safety Guard
+
+- **Always blocked**: `DROP`, `TRUNCATE`, `ALTER TABLE`, `GRANT/REVOKE`, `DELETE/UPDATE` without `WHERE`
+- **Warned (`warn`) / blocked (`strict`)**: `SELECT *`, queries without `WHERE` or `LIMIT`, PII column access
+- **Auto-LIMIT**: appends `LIMIT N` when `REDASH_AUTO_LIMIT` is set
+
+Details: [docs/sql-safety-guard.md](docs/sql-safety-guard.md). Query results are also cached in memory (see `REDASH_MCP_CACHE_*` below).
 
 ## Environment Variables
 
-### Required
-
-| Variable | Description |
-|---|---|
-| `REDASH_URL` | Redash instance URL (e.g. `https://redash.example.com`) |
-| `REDASH_API_KEY` | Redash user API key |
-
-### Optional
-
 | Variable | Default | Description |
 |---|---|---|
+| `REDASH_URL` | **required** | Redash instance URL (e.g. `https://redash.example.com`) |
+| `REDASH_API_KEY` | **required** | Redash user API key |
 | `REDASH_SAFETY_MODE` | `warn` | SQL safety level: `off` / `warn` / `strict` |
 | `REDASH_SAFETY_DISABLE_PII` | `false` | Disable PII detection |
 | `REDASH_SAFETY_DISABLE_COST` | `false` | Disable cost warnings |
-| `REDASH_AUTO_LIMIT` | `0` | Auto-append `LIMIT N` to queries without one (0 = disabled) |
+| `REDASH_AUTO_LIMIT` | `0` | Auto-append `LIMIT N` to queries without one (0 = off) |
 | `REDASH_DEFAULT_MAX_AGE` | `0` | Redash cache TTL in seconds |
-| `REDASH_MCP_CACHE_TTL` | `300` | MCP query cache TTL in seconds (0 = disabled) |
-| `REDASH_MCP_CACHE_MAX_MB` | `50` | Max memory for MCP query cache in MB |
-| `REDASH_MCP_CONFIG_DIR` | `~/.redash-mcp` | Directory for BIRD few-shot, feedback, eval, keyword-map data |
-| `REDASH_BIRD_ENABLED` | `true` | Set to `false` to disable BIRD smart query tools |
+| `REDASH_MCP_CACHE_TTL` | `300` | MCP query cache TTL in seconds (0 = off) |
+| `REDASH_MCP_CACHE_MAX_MB` | `50` | Max memory for the MCP query cache |
+| `REDASH_MCP_CONFIG_DIR` | `~/.redash-mcp` | Where BIRD few-shot, feedback, eval, and keyword-map data live |
+| `REDASH_BIRD_ENABLED` | `true` | `false` disables the BIRD smart query tools |
 | `REDASH_HTTP_TIMEOUT_SECS` | `30` | Per-request HTTP timeout against the Redash API |
-| `ANTHROPIC_API_KEY` | — | If set, BIRD smart_query falls back to Claude Haiku for table selection when keyword scoring fails |
-
----
+| `ANTHROPIC_API_KEY` | — | Enables the Claude Haiku fallback for table selection in `smart_query` |
 
 ## Usage Examples
 
-Just ask Claude in natural language:
+Just ask in natural language:
 
-- "Show me the columns in the users table"
-- "Run a query to get order counts for the last 7 days"
-- "List all saved queries"
-- "Show widgets in the revenue dashboard"
-- "Create an alert when daily signups drop below 100"
+- "How many new users signed up this month?" → `smart_query` picks the tables → `run_query`
+- "What percentage of last week's new users made a purchase?" → `smart_query` guides the JOIN → `run_query`
+- "Create an alert when daily signups drop below 100" → `create_alert`
 
-### Example 1: Query data with natural language
+**Build a dashboard:** "Save a monthly revenue query, chart it as a line, and put it on a new Revenue dashboard."
 
-> **Prompt**: "How many new users signed up this month?"
+1. `create_query` — save "Monthly Revenue"
+2. `create_visualization` — `type: "line"`, `x_column: "month"`, `y_columns: ["revenue"]`
+3. `create_dashboard` — create "Revenue"
+4. `add_widget` — place the chart; more widgets stack below or pair side by side
 
-**Tool flow:**
-1. `list_data_sources` → Identify the target data source
-2. `smart_query` → Analyze the question, auto-select the `User` table, provide SQL generation guidance
-3. `run_query` → Execute the generated SQL
+## Troubleshooting
 
-**Result:**
+| Symptom | Fix |
+|---|---|
+| `npx` not found (macOS GUI apps) | Run `which npx` and use the full path as `command` |
+| "Authentication failed" | Check `REDASH_API_KEY` — it must be a user API key |
+| "Unable to connect to the Redash server" | Check `REDASH_URL` (base URL with `https://`, without `/api`) and network/VPN |
+| "The query timed out" | Simplify the query or pass a larger `timeout_secs` to `run_query`; raise `REDASH_HTTP_TIMEOUT_SECS` for slow API responses |
+| Query blocked by the safety guard | Add `WHERE`/`LIMIT`; in `strict` mode, switch to `REDASH_SAFETY_MODE=warn` to get warnings instead |
+| Tools don't show up | Fully restart the client after editing its config |
+
+## Development
+
+```bash
+npm install
+npm run dev     # run from source (tsx)
+npm test        # vitest
+npm run build   # typecheck + bundle to dist/
 ```
-There were 18,197 new signups this month.
-```
-
-### Example 2: Complex business questions
-
-> **Prompt**: "What percentage of last week's new users made a purchase?"
-
-**Tool flow:**
-1. `smart_query` → Analyze the question, auto-select `User` and `Payment` tables, provide JOIN query guidance
-2. `run_query` → Execute the SQL
-
-**Result:**
-```
-Out of 1,204 new users last week, 312 made a purchase (25.9%).
-```
-
-### Example 3: Create a query and dashboard
-
-> **Prompt**: "Create a monthly revenue trend query and add it to a dashboard"
-
-**Tool flow:**
-1. `smart_query` → Analyze revenue-related tables
-2. `create_query` → Save the "Monthly Revenue Trend" query
-3. `create_dashboard` → Create a "Revenue Dashboard"
-4. `create_visualization` → Create a line chart on the saved query
-5. `add_widget` → Add the chart widget to the dashboard
-
-**Result:**
-```
-Created "Revenue Dashboard" with the monthly revenue trend chart.
-View in Redash: https://your-redash.com/dashboard/monthly-revenue
-```
-
----
 
 ## Privacy Policy
 
-### Data Collection and Processing
-
-redash-mcp is a **local MCP server** that communicates directly with your Redash instance. No intermediate servers are involved.
+redash-mcp is a **local MCP server** that talks directly to your Redash instance. No intermediate servers are involved.
 
 | Item | Description |
 |------|-------------|
 | **Redash API Key** | Stored only as a local environment variable (`REDASH_API_KEY`). Never transmitted externally. |
-| **Query content & results** | Delivered only to the local MCP client (Claude Desktop/Code) via the MCP protocol. |
-| **BIRD SQL settings** | Stored only in local files (`~/.redash-mcp/`). Includes few-shot examples, keyword maps, and feedback. |
-| **LLM Fallback** | When `ANTHROPIC_API_KEY` is set, only table name lists are sent to the Anthropic API. Query data and results are never transmitted. |
+| **Query content & results** | Delivered only to the local MCP client via the MCP protocol. |
+| **BIRD SQL settings** | Stored only in local files (`~/.redash-mcp/`): few-shot examples, keyword maps, and feedback. |
+| **LLM Fallback** | Only when `ANTHROPIC_API_KEY` is set, table name lists are sent to the Anthropic API. Query data and results are never transmitted. |
 
-### Third-Party Sharing
+We do not sell or share user data with third parties.
 
-We do not sell or share user data with third parties. When the LLM Fallback feature is active, only table name lists are sent to the Anthropic API, and only when the user has explicitly configured an `ANTHROPIC_API_KEY`.
+**Retention:** config files stay in `~/.redash-mcp/` until you delete them; the query cache is in-memory and cleared on shutdown; the schema cache is in-memory with a 10-minute TTL.
 
-### Data Retention
-
-- **Config files**: Stored locally in `~/.redash-mcp/` (user can delete at any time)
-- **Query cache**: In-memory only, cleared on server shutdown
-- **Schema cache**: In-memory only, auto-expires after 10-minute TTL
-
-### Contact
-
-For inquiries and security reports: [GitHub Issues](https://github.com/seob717/redash-mcp/issues)
-
----
+**Contact:** inquiries and security reports via [GitHub Issues](https://github.com/seob717/redash-mcp/issues).
 
 ## Disclaimer
 
